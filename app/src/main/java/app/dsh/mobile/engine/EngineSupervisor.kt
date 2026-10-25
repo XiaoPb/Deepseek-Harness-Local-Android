@@ -645,6 +645,9 @@ class EngineSupervisor(private val ctx: Context) {
                         _state.value =
                             if (safe) State.SafeMode(EngineConfig.DEFAULT_PORT, tokenUrl, notice)
                             else State.Healthy(EngineConfig.DEFAULT_PORT, tokenUrl, notice)
+                        // 新运行时首次 Healthy：确认安装成功，释放 engine.old 回滚备份。
+                        runCatching { RuntimeInstaller(ctx).markHealthy() }
+                            .onFailure { Log.w(TAG, "runtime markHealthy failed: ${it.message}") }
                         // 启动记录收尾：引擎已可用。WebView 首屏耗时会由 UI 层补记。
                         BootTrace.ready(ctx)
                         // ⚠️ v1.4.9：成功进入 Healthy/SafeMode 后**重置墙钟起点与插件
