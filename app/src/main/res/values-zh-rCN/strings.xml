@@ -629,6 +629,6 @@
     <string name="about_runtime_latest">运行时已是最新</string>
     <string name="about_runtime_failed">运行时检查失败：%1$s</string>
     <string name="about_runtime_installing">正在安装运行时… %1$d%%</string>
-    <string name="about_runtime_installed">运行时已安装，重启引擎后生效</string>
+    <string name="about_runtime_installed">运行时已安装，正在重启引擎</string>
     <string name="about_runtime_no_pin">无法获取已签名的运行时索引</string>
 </resources>

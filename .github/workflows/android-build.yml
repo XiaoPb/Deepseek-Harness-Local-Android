@@ -106,7 +106,7 @@ jobs:
       - name: 收集 Termux Node 运行时（${{ matrix.termux_arch }}）
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq apt dpkg-dev zip
+          sudo apt-get install -y -qq apt dpkg-dev zip unzip
           chmod +x scripts/collect-termux-runtime.sh scripts/build-runtime.sh
           ./scripts/build-runtime.sh --abi ${{ matrix.abi }} --out runtime.zip
           cp runtime.json runtime-meta.json
