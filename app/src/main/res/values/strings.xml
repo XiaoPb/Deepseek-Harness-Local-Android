@@ -599,4 +599,13 @@ You can still continue without updating, but the interface will not display.</st
     <string name="pet_channel_desc">Keeps the floating pet running</string>
     <string name="pet_error_port_busy">Port 7779 is already in use</string>
     <string name="pet_error_no_permission">Overlay permission is missing</string>
+    <string name="about_runtime">Runtime</string>
+    <string name="about_runtime_idle">Check for runtime updates</string>
+    <string name="about_runtime_checking">Checking runtime…</string>
+    <string name="about_runtime_available">Runtime %1$s available — tap to install</string>
+    <string name="about_runtime_latest">Runtime is up to date</string>
+    <string name="about_runtime_failed">Runtime check failed: %1$s</string>
+    <string name="about_runtime_installing">Installing runtime… %1$d%%</string>
+    <string name="about_runtime_installed">Runtime installed — restart the engine to use it</string>
+    <string name="about_runtime_no_pin">Signed runtime index unavailable</string>
 </resources>

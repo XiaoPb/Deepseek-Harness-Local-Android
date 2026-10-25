@@ -3,10 +3,17 @@ package app.dsh.mobile
 import android.app.Activity
 import android.content.ClipData
 import android.content.ClipboardManager
+import android.os.Build
 import android.os.Bundle
 import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
+import app.dsh.mobile.engine.EngineConfig
+import app.dsh.mobile.engine.RepoConfig
+import app.dsh.mobile.engine.RuntimeIndexClient
+import app.dsh.mobile.engine.RuntimeInstaller
+import org.json.JSONObject
+import java.io.File
 
 /**
  * 关于页（MIUI 风格）：应用标识卡 + 介绍/特性 + 开源地址（点击复制）。
@@ -56,7 +63,107 @@ class AboutActivity : Activity() {
             }
             checkForUpdate()
         }
+
+        // 运行时更新（v1.4.20）：与 App 更新解耦；索引必须验签。
+        findViewById<android.view.View>(R.id.rowRuntime).setOnClickListener {
+            val pending = pendingRuntime
+            if (pending != null) installRuntime(pending) else checkRuntime()
+        }
     }
+
+    /** 待安装的运行时（检查到更新后由再次点击触发） */
+    private var pendingRuntime: RuntimeIndexClient.Entry? = null
+
+    private val runtimeIndexUrl: String get() = RepoConfig.RELEASES_LATEST + "/runtime-index.json"
+    private val runtimeProxy: String get() = "https://gh-proxy.org/"
+
+    private fun checkRuntime() {
+        val tv = findViewById<TextView>(R.id.txtRuntime)
+        tv.text = getString(R.string.about_runtime_checking)
+        tv.setTextColor(0xFF8A94A3.toInt())
+        val abi = deviceAbi()
+        val code = currentVersionCode()
+        Thread({
+            val entry = RuntimeIndexClient.resolve(
+                this, runtimeIndexUrl, runtimeProxy, abi, null, code,
+            )
+            runOnUiThread {
+                when {
+                    entry == null -> {
+                        tv.text = getString(
+                            R.string.about_runtime_failed,
+                            getString(R.string.about_runtime_no_pin),
+                        )
+                        tv.setTextColor(0xFF8A94A3.toInt())
+                    }
+                    entry.version == installedRuntimeVersion() -> {
+                        tv.text = getString(R.string.about_runtime_latest)
+                        tv.setTextColor(0xFF81C995.toInt())
+                    }
+                    else -> {
+                        pendingRuntime = entry
+                        tv.text = getString(R.string.about_runtime_available, entry.version)
+                        tv.setTextColor(0xFF7DD3FC.toInt())
+                    }
+                }
+            }
+        }, "runtime-check").apply { isDaemon = true; start() }
+    }
+
+    private fun installRuntime(entry: RuntimeIndexClient.Entry) {
+        val tv = findViewById<TextView>(R.id.txtRuntime)
+        tv.text = getString(R.string.about_runtime_installing, 0)
+        tv.setTextColor(0xFF7DD3FC.toInt())
+        pendingRuntime = null
+        Thread({
+            try {
+                RuntimeInstaller(this).installFromIndex(
+                    entry = entry,
+                    indexUrl = runtimeIndexUrl,
+                    proxies = listOf(runtimeProxy),
+                    onProgress = { frac ->
+                        val pct = (frac * 100).toInt()
+                        runOnUiThread {
+                            tv.text = getString(R.string.about_runtime_installing, pct)
+                        }
+                    },
+                )
+                runOnUiThread {
+                    tv.text = getString(R.string.about_runtime_installed)
+                    tv.setTextColor(0xFF81C995.toInt())
+                }
+            } catch (e: Exception) {
+                runOnUiThread {
+                    tv.text = getString(
+                        R.string.about_runtime_failed,
+                        e.message ?: e.javaClass.simpleName,
+                    )
+                    tv.setTextColor(0xFFF87171.toInt())
+                }
+            }
+        }, "runtime-install").apply { isDaemon = true; start() }
+    }
+
+    private fun deviceAbi(): String = when {
+        Build.SUPPORTED_ABIS.contains("arm64-v8a") -> "arm64-v8a"
+        Build.SUPPORTED_ABIS.contains("x86_64") -> "x86_64"
+        else -> Build.SUPPORTED_ABIS.firstOrNull().orEmpty()
+    }
+
+    private fun currentVersionCode(): Int = runCatching {
+        val info = packageManager.getPackageInfo(packageName, 0)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) info.longVersionCode.toInt() else info.versionCode
+    }.getOrDefault(0)
+
+    private fun installedRuntimeVersion(): String? = runCatching {
+        val root = EngineConfig.engineRoot(this)
+        val meta = File(root, ".runtime.json")
+        if (meta.isFile) {
+            JSONObject(meta.readText()).optString("version").takeIf { it.isNotBlank() }
+        } else {
+            File(root, ".runtime-version").takeIf { it.isFile }?.readText()?.trim()
+        }
+    }.getOrNull()
 
     /** 待跳转的 Release 地址（检测到新版本后由点击触发跳转） */
     private var pendingReleaseUrl: String? = null
