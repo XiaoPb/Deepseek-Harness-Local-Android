@@ -68,7 +68,7 @@ def main() -> int:
         open(args.dst, "wb").write(base64.b64encode(sig))
     finally:
         os.unlink(sig_path)
-    print(f"signed: {args.dst} ({len(sig)} bytes ECDSA)")
+    print(f"signed: {args.dst} ({len(sig)} bytes)")
     return 0
 
 
