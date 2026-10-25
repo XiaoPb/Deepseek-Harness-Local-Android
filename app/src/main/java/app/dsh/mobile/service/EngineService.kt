@@ -266,6 +266,10 @@ class EngineService : Service() {
                 runCatching {
                     app.dsh.mobile.StatusOverlay.teardown(app.dsh.mobile.DshAccessibilityService.instance)
                 }
+                // 桌宠同理：显式退出引擎 = 用户不想再常驻，停止服务并清偏好。
+                runCatching {
+                    app.dsh.mobile.pet.PetOverlayService.stop(this@EngineService)
+                }
                 stopSelf()
             }
         }, "engine-exit").apply { isDaemon = true; start() }

@@ -5,6 +5,27 @@
   README 体积修正 + CI 刷包修复。versionCode 270。
 - issue #42/#43/#44/#47 已通知报告人验证。
 
+## v1.4.19 待发（桌宠悬浮窗预留：插件驱动、不打包插件/素材）
+- **需求**：预留系统悬浮桌宠；用户自行安装 dsh 插件后开启；不改 dsh-pet 本体。
+- **生态事实修正**：真正可用的是 `dsh-pet-bridge@0.1.0`（cc-pet HookServer 协议），
+  五字段是 `kind/agent_source/tool_name/tool_input/caller_pid`，**没有 bubble 文本**；
+  `tool/result→post` 不带工具名，所以原生只显示「完成一步」，不伪造「已读 xxx」。
+- **实现**：新增 `app.dsh.mobile.pet`（Protocol/BridgeServer/Controller/Pack/Installer/
+  Renderer/View/Physics/Service/Menu/Settings/Prefs/Detector/Status）。独立前台服务，
+  `TYPE_APPLICATION_OVERLAY`，不碰 `StatusOverlay` 的无障碍 overlay。
+- **入口**：设置→扩展→桌面宠物；桥插件装了但没重启引擎时给出「重启引擎」。
+  `PluginCenter.BUILTIN` 与 `community-plugins.json` 增加 `dsh-pet-bridge` 目录项，
+  但不随包安装；pnpm/symlink 手工方式不采用。
+- **动画**：不打包任何 WebP；默认 Canvas 占位鲸鱼；用户可导入 dsh-pet-android 的
+  APK/zip（`assets/pet-config.json` + `assets/webp/*.webp`）。导入有路径穿越、
+  entry/大小/空间限制，临时目录原子替换。素材许可为「禁止商用」，见 `NOTICE`。
+- **协议/限制**：仅 `127.0.0.1:7779`；8KB body、5s 超时、2 worker；stop 1.5s 宽限；
+  引擎被杀时 30s 看门狗回待机；窗口矩形透明区仍挡触摸（已写文档）。
+- **验证**：`scripts/probes/_test_pet_overlay.py`、`scripts/check-i18n.py`、
+  `_test_responsive_native_ui.py` 全过；pet 包用 kotlinc 2.3.20 + android.jar 编译通过；
+  aapt2 compile + link（android-36）全资源通过；本机无 Gradle wrapper/ML Kit 缓存，
+  完整 `assembleDebug` 与模拟器端到端待 CI/Android Studio 补跑。
+
 ## 2026-10-25 issues/PR 批量处理
 - **修复已推送**（commit 2a3db3d，将随 v1.4.20 发）：
   #42 Android 10 存储权限（WRITE/READ maxSdkVersion 28→29——MANAGE 是 API 30 才有，

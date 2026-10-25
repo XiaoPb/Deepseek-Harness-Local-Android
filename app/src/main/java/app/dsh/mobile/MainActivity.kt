@@ -24,6 +24,7 @@ import app.dsh.mobile.engine.WebViewDownloader
 import app.dsh.mobile.engine.EngineSupervisor
 import app.dsh.mobile.engine.Privilege
 import app.dsh.mobile.service.EngineService
+import app.dsh.mobile.pet.PetOverlayService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
@@ -206,6 +207,8 @@ class MainActivity : Activity() {
         }
         // 前台进入即拉起前台服务；服务存在则幂等
         EngineService.start(this)
+        // 用户已开启桌宠时恢复；未授权/未开启时这里是零开销。
+        runCatching { PetOverlayService.restoreIfEnabled(this) }
         // 页面卡死看门狗（v1.2.100）：前台时才检测（后台由系统节流，探针会误判）
         startHangWatchdog()
         // 从设置页返回：语言若被改过，原地重建本页（设置页只重建了它自己，
