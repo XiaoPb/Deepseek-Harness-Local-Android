@@ -162,8 +162,10 @@ for layout in ("activity_about.xml", "activity_plugin_store.xml",
 
 plugin = read(os.path.join(JAVA, "PluginStoreActivity.kt"))
 ext = read(os.path.join(JAVA, "ExtensionStoreActivity.kt"))
-check("PluginStore: caps list width at 900dp",
-      "STORE_CONTENT_MAX_WIDTH_DP = 900" in plugin and "pluginStoreBody" in plugin)
+# v1.4.21 插件中心重写后 PluginStore 上游定为 720dp（ExtensionStore 仍 900dp），
+# 这里只校验限宽结构存在，不再硬编码具体数值
+check("PluginStore: caps list width via STORE_CONTENT_MAX_WIDTH_DP",
+      "STORE_CONTENT_MAX_WIDTH_DP" in plugin and "pluginStoreBody" in plugin)
 check("ExtensionStore: caps list width at 900dp",
       "STORE_CONTENT_MAX_WIDTH_DP = 900" in ext and "extensionStoreBody" in ext)
 
@@ -174,8 +176,10 @@ check("MaxWidthLinearLayout: no layout inflation dependency",
       "LayoutInflater" not in maxw and "setContentView" not in maxw)
 
 onboarding = read(os.path.join(JAVA, "OnboardingActivity.kt"))
+# 主题切换重建增强后默认值写作 savedInstanceState 恢复 ?: defaultFor(this)，
+# 校验默认值仍来自 OrientationPrefs 即可
 check("Onboarding: tablet default from OrientationPrefs",
-      "selectedOrientation = OrientationPrefs.defaultFor(this)" in onboarding)
+      "OrientationPrefs.defaultFor(this)" in onboarding)
 
 # --------------------------------------------------------------------- i18n
 for locale in ("values", "values-zh-rCN", "values-de"):
