@@ -159,6 +159,7 @@ tasks.matching { it.name.startsWith("process") && it.name.endsWith("Resources") 
 
 android {
     namespace = "app.dsh.mobile"
+    ndkVersion = "28.2.13676358" // TEMP local verify
     // CI 上 compileSdk=35；本地 SDK 只有 33/36/36.1 时可临时降/升到此值，
     // compileSdk 仅决定编译期 API 可见性，不影响运行时行为（targetSdk=28 才是生效阈值）。
     compileSdk = 36

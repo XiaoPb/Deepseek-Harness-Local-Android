@@ -504,6 +504,7 @@ You can still continue without updating, but the interface will not display.</st
     <string name="code_copied_toast">Copied %1$s</string>
     <string name="overlay_exit_daemon">Exit daemon</string>
     <string name="splash_preparing">Preparing the runtime…</string>
+    <string name="splash_tagline">Local engine · data stays on device</string>
     <string name="splash_starting">Starting the engine…</string>
     <string name="splash_loading">Loading the interface…</string>
     <string name="splash_hint">Please wait a few seconds…</string>
