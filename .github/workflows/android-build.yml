@@ -7,7 +7,7 @@ name: android-build
 #   build-hardssh —— 解析 npm 最新版本，从上游 Release 取 tgz，组装 APK 内置目录
 #   collect-runtime —— 从 Termux 仓库收集对应架构 node 运行时 + 注入内置 SSH 插件 → runtime.zip
 #   build-apk       —— 注入 runtime.zip 进 assets → gradle -Pabi=... 出 APK
-#   release         —— 构建成功后，双架构 APK 自动发到本仓库 Releases（v1.2.120）
+#   publish-preview —— 每日定时：双架构 debug 包发到滚动 pre-release "preview"
 #   build-monitor   —— 汇总各 legs 结果到 Step Summary，任一失败即整红
 #
 # 监视（v1.2.120）：每次 push / PR / dispatch / 定时都跑，build-monitor 汇总
@@ -417,7 +417,6 @@ jobs:
           C=$(grep -oP 'versionCode\s*=\s*\K[0-9]+' app/build.gradle.kts)
           echo "version=$V" >> "$GITHUB_OUTPUT"
           echo "versionCode=$C" >> "$GITHUB_OUTPUT"
-          echo "tag=v$V-${{ github.run_number }}" >> "$GITHUB_OUTPUT"
 
       - name: 下载双架构 × 双形态 APK 工件
         uses: actions/download-artifact@v4
@@ -443,10 +442,14 @@ jobs:
       - name: 发布预览版（滚动 prerelease preview）
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.ver.outputs.tag }}
-          name: v${{ steps.ver.outputs.version }} · build ${{ github.run_number }}
+          tag_name: preview
+          name: Preview · v${{ steps.ver.outputs.version }} · build ${{ github.run_number }}
           files: apk/*.apk
-          generate_release_notes: true
+          prerelease: true
+          make_latest: false
+          overwrite_files: true
+          fail_on_unmatched_files: true
+          generate_release_notes: false
           body: |
             每日定时（01:30）预览构建：v${{ steps.ver.outputs.version }} (versionCode ${{ steps.ver.outputs.versionCode }}) · build ${{ github.run_number }}
 
@@ -754,6 +757,7 @@ jobs:
             echo "| build-hardssh (npm ${{ env.HARDSSH_VERSION }}) | ${{ needs.build-hardssh.result }} |"
             echo "| collect-runtime (aarch64 + x86_64) | ${{ needs.collect-runtime.result }} |"
             echo "| build-apk (arm64-v8a + x86_64) | ${{ needs.build-apk.result }} |"
+            echo "| publish-preview (每日定时) | ${{ needs.publish-preview.result }} |"
             echo "| publish-release (tag v*) | ${{ needs.publish-release.result }} |"
             echo "| publish-edge (push main) | ${{ needs.publish-edge.result }} |"
           } >> "$GITHUB_STEP_SUMMARY"
