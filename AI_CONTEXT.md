@@ -2237,6 +2237,7 @@ URL: https://github.com/Soodok/Deepseek-Harness-Local-Android/releases/tag/v1.4.
 - 修复 ABI 选择：`AboutActivity`/`RuntimeInstaller`/`SelfCheck` 改用 `Build.SUPPORTED_ABIS.first()`，避免 MuMu 等带 arm 转译的 x86 设备误选 arm64 运行时（表现为 `bundled e_machine=183, device expects 62`）。
 - 关于页在已安装时显示“运行时 <version> 已是最新”，不再显示“可用，点击安装”。
 - v1.4.20 版本号升至 270/1.4.20；MuMu 实测：首启 1:09 时仍显示下载卡片（112/127MB），完成后引擎 Healthy；关于页显示 x86_64 版本已是最新。
+- 原生主题（v1.4.20）：`ThemeMode` 深色（默认）/浅色/跟随系统；`ThemedActivity` + `ThemeManager.wrap` 用 uiMode 选择 `values`/`values-night`；引导页与设置页均可切换；全部 layout/drawable 颜色改为语义色资源。WebView 不专门处理。
 
 ### 追加验证（同日）
 - **gh-proxy 可用性**：通过 `https://gh-proxy.org/https://github.com/...` 下载 x86_64 完整包（146.1 MB）成功，`verify-apk-assets` 通过。
