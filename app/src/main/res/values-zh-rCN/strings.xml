@@ -599,6 +599,11 @@
     <string name="pet_error_port_busy">7779 端口已被占用</string>
     <string name="pet_error_no_permission">缺少悬浮窗权限</string>
     <string name="about_runtime">运行时</string>
+    <string name="runtime_setup_title">需要下载运行时</string>
+    <string name="runtime_setup_message">当前是 noruntime 简单包，不含 Node.js 运行时。现在下载 %1$s（建议 Wi-Fi）？之后 App 升级不会重复下载。</string>
+    <string name="runtime_setup_download">下载并启动</string>
+    <string name="runtime_setup_full">下载完整包</string>
+    <string name="runtime_setup_later">稍后</string>
     <string name="about_runtime_idle">检查运行时更新</string>
     <string name="about_runtime_checking">正在检查运行时…</string>
     <string name="about_runtime_available">运行时 %1$s 可用，点击安装</string>

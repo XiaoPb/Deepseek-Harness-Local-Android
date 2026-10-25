@@ -141,6 +141,16 @@ class RuntimeInstaller(private val ctx: Context) {
     }
 
     /**
+     * noruntime 包且本机还没有完整运行时 → 首启需要先征得用户同意再下载。
+     * 只读探针，不触发安装。
+     */
+    fun needsRuntimeDownload(): Boolean = runCatching {
+        val manifest = readManifest()
+        manifest.packageName == "noruntime" &&
+            !(EngineConfig.nodeBin(ctx).exists() && isRootComplete())
+    }.getOrDefault(false)
+
+    /**
      * 显式安装云端索引里的运行时（设置/关于页“检查运行时更新”）。
      * 与首启安装走同一条 staging 流程；调用方需在后台线程执行。
      */

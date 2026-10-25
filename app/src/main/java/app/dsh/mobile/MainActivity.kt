@@ -3,6 +3,7 @@ package app.dsh.mobile
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ActivityInfo
@@ -20,6 +21,8 @@ import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
 import app.dsh.mobile.engine.BootTrace
+import app.dsh.mobile.engine.RepoConfig
+import app.dsh.mobile.engine.RuntimeInstaller
 import app.dsh.mobile.engine.WebViewDownloader
 import app.dsh.mobile.engine.EngineSupervisor
 import app.dsh.mobile.engine.Privilege
@@ -185,6 +188,33 @@ class MainActivity : Activity() {
         }
     }
 
+    /**
+     * noruntime 包首启确认框：显示下载体积、建议 Wi-Fi、提供完整包入口。
+     * 只有用户点「下载并启动」才拉起引擎（进而触发运行时下载）。
+     */
+    private fun showRuntimeSetupDialog() {
+        val sizeMb = runCatching {
+            RuntimeInstaller(this).readManifest().runtime.size / (1L shl 20)
+        }.getOrDefault(0L)
+        val sizeText = if (sizeMb > 0) "$sizeMb MB" else "~130 MB"
+        AlertDialog.Builder(this)
+            .setTitle(R.string.runtime_setup_title)
+            .setMessage(getString(R.string.runtime_setup_message, sizeText))
+            .setPositiveButton(R.string.runtime_setup_download) { _, _ ->
+                EngineService.start(this)
+            }
+            .setNeutralButton(R.string.runtime_setup_full) { _, _ ->
+                runCatching {
+                    startActivity(
+                        Intent(Intent.ACTION_VIEW, Uri.parse(RepoConfig.RELEASES_PAGE))
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                    )
+                }
+            }
+            .setNegativeButton(R.string.runtime_setup_later, null)
+            .show()
+    }
+
     override fun onResume() {
         super.onResume()
         // 🔴 v1.2.91：恢复 WebView 的 JS 定时器。
@@ -205,8 +235,14 @@ class MainActivity : Activity() {
         ) {
             return   // 门禁未过：不启动引擎（引擎起了前端也渲染不了，纯粹耗电）
         }
-        // 前台进入即拉起前台服务；服务存在则幂等
-        EngineService.start(this)
+        // 前台进入即拉起前台服务；服务存在则幂等。
+        // v1.4.20：noruntime 包首启先确认下载运行时（约 130MB），不在用户不知情时
+        // 直接走蜂窝下载；确认后仍由监督器的 Installing 流程显示真实进度。
+        if (RuntimeInstaller(this).needsRuntimeDownload()) {
+            showRuntimeSetupDialog()
+        } else {
+            EngineService.start(this)
+        }
         // 用户已开启桌宠时恢复；未授权/未开启时这里是零开销。
         runCatching { PetOverlayService.restoreIfEnabled(this) }
         // 页面卡死看门狗（v1.2.100）：前台时才检测（后台由系统节流，探针会误判）
