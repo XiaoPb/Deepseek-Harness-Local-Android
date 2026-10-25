@@ -105,6 +105,7 @@ class RuntimeInstaller(private val ctx: Context) {
         onProgress: (Float) -> Unit = {},
         onDetail: (BootTrace.Install) -> Unit = {},
     ): Boolean {
+        recoverPendingHealth()
         val manifest = readManifest()
         val complete = EngineConfig.nodeBin(ctx).exists() && isRootComplete()
         if (complete) {
@@ -149,6 +150,83 @@ class RuntimeInstaller(private val ctx: Context) {
         manifest.packageName == "noruntime" &&
             !(EngineConfig.nodeBin(ctx).exists() && isRootComplete())
     }.getOrDefault(false)
+
+    /**
+     * 引擎进入 Healthy/SafeMode 后调用：确认新运行时可用，删除 engine.old 与 pending 标记。
+     * 幂等；没有待确认安装时是 no-op。
+     */
+    fun markHealthy() {
+        val marker = pendingMarker()
+        val backup = backupDir()
+        if (!marker.isFile && !backup.exists()) return
+        runCatching {
+            if (backup.exists() && !backup.deleteRecursively()) {
+                Log.w(TAG, "could not remove runtime backup ${backup.absolutePath}")
+            }
+            marker.delete()
+            metaBackupFile().delete()
+            stampBackupFile().delete()
+        }.onFailure { Log.w(TAG, "markHealthy cleanup failed: ${it.message}") }
+        Log.i(TAG, "runtime confirmed healthy; previous runtime backup released")
+    }
+
+    /**
+     * 启动时处理“上次换运行时后从未确认 Healthy”的情况。
+     *
+     * 两次启动都未进入 Healthy（或当前 runtimes 不完整）→ 回滚 engine.old；
+     * 第一次未确认只累加计数，避免用户强杀 App 造成误回滚。
+     */
+    private fun recoverPendingHealth() {
+        val marker = pendingMarker()
+        val backup = backupDir()
+        if (!marker.isFile) return
+        if (!backup.isDirectory || backup.listFiles().isNullOrEmpty()) {
+            marker.delete()
+            return
+        }
+        val attempts = (runCatching { marker.readText().trim().toInt() }.getOrNull() ?: 0) + 1
+        val currentOk = isRootComplete()
+        if (currentOk && attempts < 2) {
+            marker.writeText(attempts.toString())
+            Log.w(TAG, "runtime pending-health (attempt $attempts); keeping new runtime for one more boot")
+            return
+        }
+        Log.w(TAG, "runtime pending-health failed (attempts=$attempts, complete=$currentOk); rolling back")
+        runCatching {
+            backup.listFiles()?.forEach { old ->
+                val current = File(root, old.name)
+                current.deleteRecursively()
+                if (!old.renameTo(current)) old.copyRecursively(current, overwrite = true)
+            }
+            restoreMetaBackups()
+            marker.delete()
+            backup.deleteRecursively()
+            Log.w(TAG, "runtime rolled back to previous version after failed boot")
+        }.onFailure {
+            Log.e(TAG, "runtime rollback failed: ${it.javaClass.simpleName}: ${it.message}")
+        }
+    }
+
+    private fun pendingMarker() = File(ctx.filesDir, ".pending-health")
+    private fun backupDir() = File(ctx.filesDir, "engine.old")
+    private fun metaBackupFile() = File(ctx.filesDir, ".runtime.json.old")
+    private fun stampBackupFile() = File(ctx.filesDir, ".runtime-version.old")
+
+    private fun backupMeta() {
+        runCatching {
+            if (metaFile.isFile) metaFile.copyTo(metaBackupFile(), overwrite = true) else metaBackupFile().delete()
+            if (stampFile.isFile) stampFile.copyTo(stampBackupFile(), overwrite = true) else stampBackupFile().delete()
+        }.onFailure { Log.w(TAG, "runtime metadata backup failed: ${it.message}") }
+    }
+
+    private fun restoreMetaBackups() {
+        runCatching {
+            if (metaBackupFile().isFile) metaBackupFile().copyTo(metaFile, overwrite = true)
+            if (stampBackupFile().isFile) stampBackupFile().copyTo(stampFile, overwrite = true)
+        }.onFailure { Log.w(TAG, "runtime metadata restore failed: ${it.message}") }
+        metaBackupFile().delete()
+        stampBackupFile().delete()
+    }
 
     /**
      * 显式安装云端索引里的运行时（设置/关于页“检查运行时更新”）。
@@ -455,6 +533,8 @@ class RuntimeInstaller(private val ctx: Context) {
             val backup = File(ctx.filesDir, "engine.old")
             staging.deleteRecursively()
             backup.deleteRecursively()
+            pendingMarker().delete()
+            backupMeta()
             staging.mkdirs()
             runCatching {
                 if (Privilege.dshHomeNeedsOwnershipFix(ctx)) {
@@ -506,11 +586,24 @@ class RuntimeInstaller(private val ctx: Context) {
                     }
                 }
                 staging.deleteRecursively()
+                backup.deleteRecursively()
+                pendingMarker().delete()
+                metaBackupFile().delete()
+                stampBackupFile().delete()
                 throw e
             }
             staging.deleteRecursively()
-            backup.deleteRecursively()
             writeStamp(info, bundled)
+            val hadBackup = backup.isDirectory && !backup.listFiles().isNullOrEmpty()
+            if (hadBackup) {
+                // 保留 engine.old 直到引擎首次 Healthy；两次未确认则自动回滚。
+                pendingMarker().writeText("0")
+                Log.i(TAG, "runtime installed; engine.old kept pending first healthy boot")
+            } else {
+                backup.deleteRecursively()
+                metaBackupFile().delete()
+                stampBackupFile().delete()
+            }
             assetZip.delete()
             Log.i(TAG, "runtime installed at $root (${entries.size} top-level entries)")
         } finally {
