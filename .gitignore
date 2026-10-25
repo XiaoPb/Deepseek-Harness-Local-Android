@@ -77,3 +77,4 @@ scripts/probes/*.bin
 !/scripts/probes/_test_webview_polyfill_v4.py
 !/scripts/probes/_test_webview_polyfill_v4.mjs
 !/scripts/probes/zstd-tail.js
+tasks/
