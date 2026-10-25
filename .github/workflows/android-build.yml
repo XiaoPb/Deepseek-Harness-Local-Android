@@ -4,7 +4,7 @@ name: android-build
 # v1.2.120 · 2026-10-13 — 全量触发 + 结果监视
 #
 # 双架构矩阵（arm64-v8a 真机 / x86_64 模拟器）：
-#   build-hardssh-plugin —— 从 GitHub 固定 ref 拉取 @xiaopb/dsh-hardssh 源码并构建
+#   build-hardssh —— 解析 npm 最新版本，从上游 Release 取 tgz，组装 APK 内置目录
 #   collect-runtime —— 从 Termux 仓库收集对应架构 node 运行时 + 注入内置 SSH 插件 → runtime.zip
 #   build-apk       —— 注入 runtime.zip 进 assets → gradle -Pabi=... 出 APK
 #   publish-preview —— 每日定时：双架构 debug 包发到滚动 pre-release "preview"
@@ -33,16 +33,11 @@ env:
   # 时区统一为 Asia/Shanghai（GitHub 的 schedule 只能写 UTC，换算见上面 cron 注释；
   # 这里只影响步骤内 date 等本地时间，发布说明脚本用的是 date -u，不受影响）。
   TZ: Asia/Shanghai
-  # 内置 SSH 远程工作区插件：源码不在本仓库，构建时从 GitHub 按固定提交拉取。
-  # 升级插件 = 改 HARDSSH_REF（commit SHA 最稳；也接受 tag/分支），其余步骤不用动。
-  # 2026-10-25：v0.2.13（fork 包名 @xiaopb/dsh-hardssh）—— 修复空 commandPolicy
-  # 持久化导致 ssh_list 丢失；v0.2.12 起已完成 DSH 0.2.1-rc.2/rc.3 兼容矩阵、
-  # 显式 keyPath、SSH 工作区新建文件夹等改动。构建末尾仍会用原生 Node import
-  # lib/index.js 作为闸门。
-  # ⚠️ 包名在 v0.2.11 起从 @tiphareth/dsh-hardssh 改为 @xiaopb/dsh-hardssh，
-  #    运行时落点、profile 链接、App 常量与打包脚本必须一起改。
-  HARDSSH_REPO: XiaoPb/dsh-hardssh
-  HARDSSH_REF: 09a1d1fb58b2fe63e19b7e9fc4300bc79bcc5d20
+  # 内置 SSH 远程工作区插件（@xiaopb/dsh-hardssh）：不再从源码构建，
+  # 也不再塞进 runtime.zip。构建时解析 npm 最新版本，从上游 Release 取 tgz
+  # （与 npm 包同 integrity），组装成 APK 的 assets/hardssh/ 内置副本。
+  # 升级插件 = 让上游发版；需要钉死时在仓库 Variables 设置 HARDSSH_VERSION。
+  HARDSSH_VERSION: latest
 
 permissions:
   contents: read   # release 段仍注释；启用时在该 job 内单独提权
@@ -57,11 +52,11 @@ jobs:
   # ---------------------------------------------------------------------------
   # 内置 SSH 远程工作区插件（@xiaopb/dsh-hardssh）
   #
-  # 设计约束（用户要求）：插件源码不进入本仓库 —— CI 在构建时从 GitHub 拉取
-  # 固定 ref，构建产物只以 runtime.zip 内文件的形式进入 APK。
-  # 纯 JS 包（ssh2/ws 也是纯 JS），与 ABI 无关，因此只构建一次，两个架构复用。
+  # 设计约束（v1.4.20）：插件源码/发布包都不进入本仓库；CI 解析 npm 最新版本，
+  # 从上游 Release 取 tgz 并校验 npm integrity，组装成 APK 内置目录。
+  # 纯 JS 包（ssh2/ws），与 ABI 无关，只构建一次，两个架构复用。
   # ---------------------------------------------------------------------------
-  build-hardssh-plugin:
+  build-hardssh:
     runs-on: ubuntu-24.04
     steps:
       - name: 校验 tag 格式（正式版只允许严格 v<major>.<minor>.<patch>）
@@ -73,43 +68,26 @@ jobs:
             exit 1
           fi
 
-      - name: 检出本仓库（打包脚本）
-        uses: actions/checkout@v4
-
-      - name: 拉取插件源码 ${{ env.HARDSSH_REPO }}@${{ env.HARDSSH_REF }}
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ env.HARDSSH_REPO }}
-          ref: ${{ env.HARDSSH_REF }}
-          path: hardssh-src
+      - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
 
-      - name: 安装 pnpm（与插件仓库 packageManager 对齐）
-        run: |
-          npm install -g pnpm@11.24.0
-          pnpm --version
-
-      - name: 构建插件
-        working-directory: hardssh-src
-        run: |
-          pnpm install --frozen-lockfile
-          pnpm --filter @xiaopb/dsh-hardssh build
-
-      - name: 组装 runtime 部署单元
+      - name: 组装内置 SSH 插件（上游 Release tgz）
         env:
-          HARDSSH_PLUGIN_REF: ${{ env.HARDSSH_REF }}
+          HARDSSH_VERSION: ${{ vars.HARDSSH_VERSION }}
         run: |
-          chmod +x scripts/pack-hardssh-plugin.sh
-          ./scripts/pack-hardssh-plugin.sh hardssh-src/packages/dsh-hardssh hardssh-plugin
-          tar -czf hardssh-plugin.tar.gz -C hardssh-plugin .
+          chmod +x scripts/pack-hardssh.sh
+          ./scripts/pack-hardssh.sh dist
+          python3 scripts/verify-hardssh-bundle.py dist/hardssh
 
       - uses: actions/upload-artifact@v4
         with:
-          name: hardssh-plugin
-          path: hardssh-plugin.tar.gz
+          name: hardssh-bundle
+          path: |
+            dist/hardssh
+            dist/hardssh.json
           retention-days: 1
 
   collect-runtime:
@@ -122,28 +100,16 @@ jobs:
           - termux_arch: x86_64
             abi: x86_64
     runs-on: ubuntu-24.04
-    needs: [build-hardssh-plugin]
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/download-artifact@v4
-        with:
-          name: hardssh-plugin
-          path: .
-
-      - name: 解包内置 SSH 插件
-        run: |
-          mkdir -p hardssh-plugin
-          tar -xzf hardssh-plugin.tar.gz -C hardssh-plugin
-
       - name: 收集 Termux Node 运行时（${{ matrix.termux_arch }}）
-        env:
-          HARDSSH_PLUGIN_DIR: ${{ github.workspace }}/hardssh-plugin
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq apt dpkg-dev zip
-          chmod +x scripts/collect-termux-runtime.sh
-          ./scripts/collect-termux-runtime.sh runtime.zip ${{ matrix.termux_arch }}
+          chmod +x scripts/collect-termux-runtime.sh scripts/build-runtime.sh
+          ./scripts/build-runtime.sh --abi ${{ matrix.abi }} --out runtime.zip
+          cp runtime.json runtime-meta.json
 
       - name: 校验运行时命令闭包（${{ matrix.abi }}）
         run: |
@@ -170,30 +136,26 @@ jobs:
             echo "::error::runtime 混入宿主 Linux ripgrep"
             exit 1
           fi
-          # 内置 SSH 远程工作区插件（@xiaopb/dsh-hardssh）：宿主代码 + 浏览器
-          # bundle + 自己的 patch 层 + 两个第三方依赖都必须在包里；App 侧依赖
-          # 这些固定路径启用插件，缺一个就静默失去 SSH 能力，因此在 CI 挡住。
-          SSH_PKG=runtime-check/lib/node_modules/@xiaopb/dsh-hardssh
-          for f in lib/index.js lib/fs.js lib/subprocess.js lib/client.js \
-                   cordis.patch.yml node_modules/ssh2/package.json node_modules/ws/package.json; do
-            test -f "$SSH_PKG/$f" || { echo "::error::内置 SSH 插件缺少 $f"; exit 1; }
-          done
-          if find "$SSH_PKG" -type l -print -quit | grep -q .; then
-            echo "::error::内置 SSH 插件含符号链接（Android 侧要求实体文件）"
+          # v1.4.20：hardssh 已与 runtime 解耦，runtime.zip 内出现它说明注入逻辑
+          # 又回来了（会导致云端运行时重装丢插件），必须挡住。
+          if [ -e "runtime-check/lib/node_modules/@xiaopb/dsh-hardssh" ]; then
+            echo "::error::runtime.zip 不应包含 @xiaopb/dsh-hardssh（已解耦到 APK 内置目录）"
             exit 1
           fi
-          echo "bash/rg/SONAME/wrapper + 内置 SSH 插件 runtime closure OK"
-
-      - name: 计算校验值
-        id: meta
-        run: |
-          echo "sha256=$(sha256sum runtime.zip | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
-          echo "size=$(stat -c%s runtime.zip)" >> "$GITHUB_OUTPUT"
+          echo "bash/rg/SONAME/wrapper runtime closure OK（hardssh 已解耦）"
 
       - uses: actions/upload-artifact@v4
         with:
           name: runtime-${{ matrix.abi }}
-          path: runtime.zip
+          path: |
+            runtime.zip
+            runtime-meta.json
+          retention-days: 1
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: runtime-meta-${{ matrix.abi }}
+          path: runtime-meta.json
           retention-days: 1
 
   build-apk:
@@ -203,10 +165,18 @@ jobs:
         include:
           - termux_arch: aarch64
             abi: arm64-v8a
+            package: full
           - termux_arch: x86_64
             abi: x86_64
+            package: full
+          - termux_arch: aarch64
+            abi: arm64-v8a
+            package: noruntime
+          - termux_arch: x86_64
+            abi: x86_64
+            package: noruntime
     runs-on: ubuntu-24.04
-    needs: [collect-runtime]
+    needs: [collect-runtime, build-hardssh]
     # 正式签名材料（v1.4.18）：GitHub Secrets 注入为环境变量，供下方解码/构建步骤使用。
     # 未配置时为空字符串 → 只构建 debug；tag 构建会被「tag 构建必须有 release 签名」拦下。
     env:
@@ -227,22 +197,35 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
+          name: hardssh-bundle
+          path: hardssh-dist
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: runtime-meta-${{ matrix.abi }}
+          path: runtime-meta
+
+      - uses: actions/download-artifact@v4
+        if: matrix.package == 'full'
+        with:
           name: runtime-${{ matrix.abi }}
-          path: .
+          path: runtime-dist
 
-      - name: 注入 runtime.zip 到 assets
-        run: mv runtime.zip app/src/main/assets/runtime.zip
-
-      - name: 回填 MANIFEST 版本与校验值
+      - name: 检查构建资产（${{ matrix.package }}）
         run: |
-          SHA=$(sha256sum app/src/main/assets/runtime.zip | cut -d' ' -f1)
-          # pull_request 时 GITHUB_REF_NAME 为 "1/merge"，含斜杠会污染版本串与文件名
-          REF="${GITHUB_REF_NAME//\//-}"
-          VER="${REF:-dev}-$(date +%Y%m%d)"
-          jq --arg sha "$SHA" --arg ver "$VER" \
-            '.version=$ver | .sha256=$sha' \
-            app/src/main/assets/runtime/MANIFEST.json > /tmp/m.json
-          mv /tmp/m.json app/src/main/assets/runtime/MANIFEST.json
+          test -f hardssh-dist/hardssh/lib/index.js
+          test -f hardssh-dist/hardssh/node_modules/ssh2/package.json
+          test -f runtime-meta/runtime-meta.json
+          if [ "${{ matrix.package }}" = "full" ]; then
+            test -f runtime-dist/runtime.zip
+            echo "full: runtime.zip $(stat -c%s runtime-dist/runtime.zip) bytes"
+          else
+            if [ -f app/src/main/assets/runtime.zip ]; then
+              echo "::error::noruntime build found stale app/src/main/assets/runtime.zip"
+              exit 1
+            fi
+            echo "noruntime: no runtime.zip (downloaded on first launch)"
+          fi
 
       - name: 安装 JDK 17
         uses: actions/setup-java@v4
@@ -261,7 +244,7 @@ jobs:
           echo "::error::tag 构建缺少 RELEASE_* secrets，无法生成正式签名包。请在仓库 Settings → Secrets and variables → Actions 配置（见 docs/RELEASE.md）。"
           exit 1
 
-      - name: 构建 APK（${{ matrix.abi }}）
+      - name: 构建 APK（${{ matrix.abi }} / ${{ matrix.package }}）
         env:
           DSH_RELEASE_STORE_FILE: ${{ github.workspace }}/keystore/dsh-release.keystore
           DSH_RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
@@ -269,9 +252,26 @@ jobs:
           DSH_RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
         run: |
           set -o pipefail   # 否则管道 exit code 取 tee 的 0，Gradle 失败会被吞
-          gradle -p . assembleDebug -Pabi=${{ matrix.abi }} --stacktrace 2>&1 | tee build-${{ matrix.abi }}.log
+          META=runtime-meta/runtime-meta.json
+          RVER=$(jq -r '.version' "$META")
+          RSHA=$(jq -r '.sha256' "$META")
+          RSIZE=$(jq -r '.size' "$META")
+          RUNPACKED=$(jq -r '.unpackedBytes' "$META")
+          ARGS=(
+            -Pabi=${{ matrix.abi }}
+            -Ppackage=${{ matrix.package }}
+            -PhardsshDir="${{ github.workspace }}/hardssh-dist/hardssh"
+            -PruntimeVersion="$RVER"
+            -PruntimeSha256="$RSHA"
+            -PruntimeSize="$RSIZE"
+            -PruntimeUnpacked="$RUNPACKED"
+          )
+          if [ "${{ matrix.package }}" = "full" ]; then
+            ARGS+=(-PruntimeZip="${{ github.workspace }}/runtime-dist/runtime.zip")
+          fi
+          gradle -p . assembleDebug "${ARGS[@]}" --stacktrace 2>&1 | tee build-${{ matrix.abi }}-${{ matrix.package }}.log
           if [ -n "${DSH_RELEASE_STORE_PASSWORD:-}" ] && [ -f keystore/dsh-release.keystore ]; then
-            gradle -p . assembleRelease -Pabi=${{ matrix.abi }} --stacktrace 2>&1 | tee build-release-${{ matrix.abi }}.log
+            gradle -p . assembleRelease "${ARGS[@]}" --stacktrace 2>&1 | tee build-release-${{ matrix.abi }}-${{ matrix.package }}.log
           else
             echo "::notice::no release signing material (RELEASE_* secrets); skipping assembleRelease"
           fi
@@ -308,7 +308,8 @@ jobs:
       # [v1.2.97] 校验 APK 内 runtime.zip 的 bin/node 架构与目标 ABI 一致。
       # 光看 lib/<abi>/*.so 查不出来（那只是壳）—— 事故实况：外壳 arm64、
       # 内部 node 是 x86_64，真机直接 not executable: 64-bit ELF file，引擎无限重启。
-      - name: 校验运行时架构（${{ matrix.abi }}）
+      - name: 校验运行时架构（${{ matrix.package }} / ${{ matrix.abi }}）
+        if: matrix.package == 'full'
         run: |
           python3 scripts/verify-runtime-abi.py \
             app/build/outputs/apk/debug/app-debug.apk ${{ matrix.abi }}
@@ -317,7 +318,7 @@ jobs:
       # 必须在产物级先重命名，否则 release merge 时后传者覆盖先传者。
       # 文件名带当前 versionName：main/edge 为 dsh-android-<ref>-<abi>-v<ver>-<variant>.apk；
       # tag 构建的 ref 本身是 v<ver>，不再重复版本段。
-      - name: 按版本+架构重命名 APK
+      - name: 按版本+架构+形态重命名 APK
         run: |
           set -euo pipefail
           mkdir -p dist
@@ -328,17 +329,22 @@ jobs:
           else
             BASE="dsh-android-${REF}-${{ matrix.abi }}-v${V}"
           fi
-          echo "APK_BASE=${BASE}" >> "$GITHUB_ENV"
-          cp app/build/outputs/apk/debug/app-debug.apk "dist/${BASE}-debug.apk"
+          SUFFIX=""
+          if [ "${{ matrix.package }}" = "noruntime" ]; then SUFFIX="-noruntime"; fi
+          APK_BASE="${BASE}${SUFFIX}"
+          echo "APK_BASE=${APK_BASE}" >> "$GITHUB_ENV"
+          echo "APK_RELEASE=dist/${BASE}-release${SUFFIX}.apk" >> "$GITHUB_ENV"
+          echo "APK_DEBUG=dist/${BASE}-debug${SUFFIX}.apk" >> "$GITHUB_ENV"
+          cp app/build/outputs/apk/debug/app-debug.apk "dist/${BASE}-debug${SUFFIX}.apk"
           if [ -f app/build/outputs/apk/release/app-release.apk ]; then
-            cp app/build/outputs/apk/release/app-release.apk "dist/${BASE}-release.apk"
+            cp app/build/outputs/apk/release/app-release.apk "dist/${BASE}-release${SUFFIX}.apk"
           fi
 
       - name: 校验 release 签名（${{ matrix.abi }}）
         if: env.RELEASE_STORE_PASSWORD != ''
         run: |
           set -euo pipefail
-          APK="dist/${APK_BASE}-release.apk"
+          APK="$APK_RELEASE"
           test -f "$APK" || { echo "::error::missing signed release apk: $APK"; exit 1; }
           APKSIGNER=$(ls -d "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
           "$APKSIGNER" verify --print-certs "$APK" | tee "release-certs-${{ matrix.abi }}.txt"
@@ -353,16 +359,9 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: dsh-android-debug-apk-${{ matrix.abi }}
-          path: dist/*-debug.apk
+          name: dsh-android-apk-${{ matrix.abi }}-${{ matrix.package }}
+          path: dist/*.apk
           retention-days: 1   # 仅 job 间传递用，避免 90 天默认堆积百 MB×N（曾堆 32GB）
-
-      - uses: actions/upload-artifact@v4
-        if: env.RELEASE_STORE_PASSWORD != ''
-        with:
-          name: dsh-android-release-apk-${{ matrix.abi }}
-          path: dist/*-release.apk
-          retention-days: 1
 
   # ⚠️ v1.2.106：**取消 CI 自动发 release**。
   #
@@ -409,12 +408,26 @@ jobs:
           echo "version=$V" >> "$GITHUB_OUTPUT"
           echo "versionCode=$C" >> "$GITHUB_OUTPUT"
 
-      - name: 下载双架构 APK 工件
+      - name: 下载双架构 × 双形态 APK 工件
         uses: actions/download-artifact@v4
         with:
-          pattern: dsh-android-debug-apk-*
+          pattern: dsh-android-apk-*
           merge-multiple: true
           path: apk/
+
+      - name: 确认 8 个 APK 齐全（debug+release × full+noruntime × 2 ABI）
+        run: |
+          set -euo pipefail
+          ls -lh apk/
+          V=$(grep -oP 'versionName\s*=\s*"\K[^"]+' app/build.gradle.kts | head -1)
+          REF="${GITHUB_REF_NAME//\//-}"
+          for abi in arm64-v8a x86_64; do
+            BASE="dsh-android-${REF}-${abi}-v${V}"
+            test -f "apk/${BASE}-debug.apk"
+            test -f "apk/${BASE}-release.apk"
+            test -f "apk/${BASE}-debug-noruntime.apk"
+            test -f "apk/${BASE}-release-noruntime.apk"
+          done
 
       - name: 发布预览版（滚动 prerelease preview）
         uses: softprops/action-gh-release@v2
@@ -431,9 +444,11 @@ jobs:
             每日定时（01:30）预览构建：v${{ steps.ver.outputs.version }} (versionCode ${{ steps.ver.outputs.versionCode }}) · build ${{ github.run_number }}
 
             架构：arm64-v8a（真机）+ x86_64（模拟器）
-            签名：debug（预览版，仅测试，不能覆盖正式版）
+            形态：full（含 runtime.zip，离线可用）+ noruntime（首启下载运行时）
+            签名：release（可覆盖正式版）+ debug（仅测试）
 
-            - 已通过：运行时闭包校验（含内置 SSH 插件）、so 16KB 页对齐、APK ABI 校验
+            - 已通过：运行时闭包校验（hardssh 已与 runtime 解耦）、so 16KB 页对齐、APK ABI 校验
+            - `*-noruntime.apk` 不含运行时；首次启动按 MANIFEST 链接下载（支持 gh-proxy）
             - 正式版只认严格 tag v<major>.<minor>.<patch> 触发的 Release
 
       - name: 清理旧文件名的资产（只保留最新一版）
@@ -452,7 +467,7 @@ jobs:
             | jq -r '.[] | [.id, .name] | @tsv')
           while IFS=$'\t' read -r asset_id asset_name; do
             [ -z "$asset_id" ] && continue
-            if [ ! -f "apk/$asset_name" ]; then
+            if [ ! -f "apk/$asset_name" ] && [ ! -f "release/$asset_name" ]; then
               echo "remove stale asset: $asset_name (id=$asset_id)"
               curl -fsS -X DELETE -H "Authorization: Bearer $GH_TOKEN" \
                 -H "Accept: application/vnd.github+json" \
@@ -492,11 +507,11 @@ jobs:
       - name: 下载双架构产物
         uses: actions/download-artifact@v4
         with:
-          pattern: dsh-android-*-apk-*
+          pattern: dsh-android-apk-*
           merge-multiple: true
           path: apk/
 
-      - name: 确认双架构 × 双变体齐全
+      - name: 确认 8 个 APK 齐全
         run: |
           set -euo pipefail
           ls -lh apk/
@@ -504,16 +519,35 @@ jobs:
           REF="${GITHUB_REF_NAME//\//-}"
           for abi in arm64-v8a x86_64; do
             if [ "$REF" = "v$V" ]; then BASE="dsh-android-${REF}-${abi}"; else BASE="dsh-android-${REF}-${abi}-v${V}"; fi
-            test -f "apk/${BASE}-release.apk"
             test -f "apk/${BASE}-debug.apk"
+            test -f "apk/${BASE}-release.apk"
+            test -f "apk/${BASE}-debug-noruntime.apk"
+            test -f "apk/${BASE}-release-noruntime.apk"
           done
+
+      - name: 下载运行时资产
+        uses: actions/download-artifact@v4
+        with:
+          pattern: runtime-*
+          path: runtime-dist
+
+      - name: 归档运行时 zip（tag 资产的下载链接）
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          for abi in arm64-v8a x86_64; do
+            src="runtime-dist/runtime-${abi}/runtime.zip"
+            test -f "$src" || { echo "::error::missing runtime zip for $abi"; exit 1; }
+            cp "$src" "release/runtime-${abi}.zip"
+          done
+          ls -lh release/
 
       - name: 生成发布说明
         env:
           APK_DIR: apk
           GH_TOKEN: ${{ github.token }}
           RELEASE_CERT_SHA256: ${{ vars.RELEASE_CERT_SHA256 }}
-          HARDSSH_REF: ${{ env.HARDSSH_REF }}
+          HARDSSH_VERSION: ${{ env.HARDSSH_VERSION }}
         run: bash scripts/generate-release-notes.sh tag release-notes.md
 
       - name: 发布 Release
@@ -521,7 +555,9 @@ jobs:
         with:
           tag_name: ${{ github.ref_name }}
           name: DSH Mobile ${{ github.ref_name }}
-          files: apk/*.apk
+          files: |
+            apk/*.apk
+            release/*.zip
           fail_on_unmatched_files: true
           draft: false
           prerelease: false
@@ -543,7 +579,7 @@ jobs:
             | jq -r '.[] | [.id, .name] | @tsv')
           while IFS=$'\t' read -r asset_id asset_name; do
             [ -z "$asset_id" ] && continue
-            if [ ! -f "apk/$asset_name" ]; then
+            if [ ! -f "apk/$asset_name" ] && [ ! -f "release/$asset_name" ]; then
               echo "remove stale asset: $asset_name (id=$asset_id)"
               curl -fsS -X DELETE -H "Authorization: Bearer $GH_TOKEN" \
                 -H "Accept: application/vnd.github+json" \
@@ -576,11 +612,11 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          pattern: dsh-android-*-apk-*
+          pattern: dsh-android-apk-*-noruntime
           merge-multiple: true
           path: apk/
 
-      - name: 确认双架构 × 双变体齐全
+      - name: 确认 noruntime 双架构 × 双变体齐全
         run: |
           set -euo pipefail
           ls -lh apk/
@@ -588,9 +624,9 @@ jobs:
           REF="${GITHUB_REF_NAME//\//-}"
           for abi in arm64-v8a x86_64; do
             if [ "$REF" = "v$V" ]; then BASE="dsh-android-${REF}-${abi}"; else BASE="dsh-android-${REF}-${abi}-v${V}"; fi
-            test -f "apk/${BASE}-debug.apk"
-            test -f "apk/${BASE}-release.apk" || {
-              echo "::error::missing signed release apk for $abi — configure RELEASE_* secrets (docs/RELEASE.md)"; exit 1; }
+            test -f "apk/${BASE}-debug-noruntime.apk"
+            test -f "apk/${BASE}-release-noruntime.apk" || {
+              echo "::error::missing signed noruntime release apk for $abi — configure RELEASE_* secrets (docs/RELEASE.md)"; exit 1; }
           done
 
       - name: 生成发布说明
@@ -598,7 +634,7 @@ jobs:
           APK_DIR: apk
           GH_TOKEN: ${{ github.token }}
           RELEASE_CERT_SHA256: ${{ vars.RELEASE_CERT_SHA256 }}
-          HARDSSH_REF: ${{ env.HARDSSH_REF }}
+          HARDSSH_VERSION: ${{ env.HARDSSH_VERSION }}
         run: bash scripts/generate-release-notes.sh edge edge-notes.md
 
       - name: 发布 edge 预发布
@@ -629,7 +665,7 @@ jobs:
             | jq -r '.[] | [.id, .name] | @tsv')
           while IFS=$'\t' read -r asset_id asset_name; do
             [ -z "$asset_id" ] && continue
-            if [ ! -f "apk/$asset_name" ]; then
+            if [ ! -f "apk/$asset_name" ] && [ ! -f "release/$asset_name" ]; then
               echo "remove stale asset: $asset_name (id=$asset_id)"
               curl -fsS -X DELETE -H "Authorization: Bearer $GH_TOKEN" \
                 -H "Accept: application/vnd.github+json" \
@@ -643,7 +679,7 @@ jobs:
   # ---------------------------------------------------------------------------
   build-monitor:
     name: Build monitor (Zusammenfassung)
-    needs: [build-hardssh-plugin, collect-runtime, build-apk, publish-preview, publish-edge, publish-release]
+    needs: [build-hardssh, collect-runtime, build-apk, publish-preview, publish-edge, publish-release]
     if: always()
     runs-on: ubuntu-24.04
     steps:
@@ -653,7 +689,7 @@ jobs:
             echo "## Build-Monitor — ${{ github.workflow }} @ ${{ github.ref_name }} (${{ github.event_name }})"
             echo "| Leg | Ergebnis |"
             echo "|---|---|"
-            echo "| build-hardssh-plugin (GitHub ${{ env.HARDSSH_REF }}) | ${{ needs.build-hardssh-plugin.result }} |"
+            echo "| build-hardssh (npm ${{ env.HARDSSH_VERSION }}) | ${{ needs.build-hardssh.result }} |"
             echo "| collect-runtime (aarch64 + x86_64) | ${{ needs.collect-runtime.result }} |"
             echo "| build-apk (arm64-v8a + x86_64) | ${{ needs.build-apk.result }} |"
             echo "| publish-preview (每日定时) | ${{ needs.publish-preview.result }} |"
@@ -662,7 +698,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Fehlschlag durchstellen
-        if: needs.build-hardssh-plugin.result != 'success' || needs.collect-runtime.result != 'success' || needs.build-apk.result != 'success' || needs.publish-preview.result == 'failure' || needs.publish-release.result == 'failure' || needs.publish-edge.result == 'failure'
+        if: needs.build-hardssh.result != 'success' || needs.collect-runtime.result != 'success' || needs.build-apk.result != 'success' || needs.publish-preview.result == 'failure' || needs.publish-release.result == 'failure' || needs.publish-edge.result == 'failure'
         run: |
-          echo "::error::Build leg failed (hardssh=${{ needs.build-hardssh-plugin.result }}, collect-runtime=${{ needs.collect-runtime.result }}, build-apk=${{ needs.build-apk.result }}, publish-release=${{ needs.publish-release.result }}, publish-edge=${{ needs.publish-edge.result }})"
+          echo "::error::Build leg failed (hardssh=${{ needs.build-hardssh.result }}, collect-runtime=${{ needs.collect-runtime.result }}, build-apk=${{ needs.build-apk.result }}, publish-release=${{ needs.publish-release.result }}, publish-edge=${{ needs.publish-edge.result }})"
           exit 1

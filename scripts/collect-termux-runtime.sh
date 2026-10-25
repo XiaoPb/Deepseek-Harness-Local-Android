@@ -787,26 +787,12 @@ rm -rf "$ROOT/lib/node_modules/sherpa-onnx-linux-x64" \
        "$ROOT/lib/node_modules/@img/sharp-libvips-linux-x64" \
        "$ROOT/lib/node_modules/node-addon-require-builtin-linux-x64-gnu" 2>/dev/null || true
 
-# ---- 4.5 内置 SSH 远程工作区插件（@xiaopb/dsh-hardssh）----
-# 源码不在本仓库：CI 的 build-hardssh-plugin job 从 GitHub 固定 ref 构建后经
-# HARDSSH_PLUGIN_DIR 传入。注入逻辑单独放在 inject-hardssh-plugin.sh（可独立测试）；
-# 是否启用由 App 启动参数决定（不传 --patch 就只是躺在包里，不加载、不占内存）。
-# 未设置时跳过，保持手工构建的最小 runtime 可用。
-#
-# ⚠️ 路径必须用 $SCRIPT_DIR（cd 之前解析好的绝对路径）。这里曾写
-# `$(dirname "$0")`，而 cwd 早在第 64/102 行变成 mktemp 工作区，CI 又是用
-# 相对路径调用 → 注入脚本永远找不到（127），两个架构的 runtime 全挂。
-# 见文件顶部 SCRIPT_DIR 的事故说明。
-if [ -n "${HARDSSH_PLUGIN_DIR:-}" ]; then
-  INJECT_SH="$SCRIPT_DIR/inject-hardssh-plugin.sh"
-  test -f "$INJECT_SH" || {
-    echo "错误：缺少注入脚本 $INJECT_SH（HARDSSH_PLUGIN_DIR=$HARDSSH_PLUGIN_DIR）" >&2
-    exit 1
-  }
-  bash "$INJECT_SH" "$ROOT" "$HARDSSH_PLUGIN_DIR"
-else
-  echo "note: HARDSSH_PLUGIN_DIR 未设置 —— runtime 不含内置 SSH 远程工作区插件"
-fi
+# ---- 4.5 内置 SSH 远程工作区插件（v1.4.20 起已解耦）----
+# 插件不再进入 runtime.zip：运行时会被云端单独更新/重装，而重装会清 engine/lib，
+# 插件若在里面就会随运行时更新被删（或反之把运行时绑死在插件版本上）。
+# 现在由 scripts/pack-hardssh.sh 单独组装 APK 的 assets/hardssh/，App 启动时
+# 由 HardsshInstaller 补装。这里只保留一条提醒，避免有人误把注入逻辑加回来。
+echo "note: hardssh 已与 runtime 解耦（APK assets/hardssh/，见 scripts/pack-hardssh.sh）"
 
 # ---- 5. 打 zip ----
 #

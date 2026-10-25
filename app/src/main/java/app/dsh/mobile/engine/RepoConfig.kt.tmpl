@@ -1,0 +1,29 @@
+package app.dsh.mobile.engine
+
+/**
+ * 自动更新使用的 GitHub 仓库。
+ *
+ * ⚠️ 本文件是模板，构建期由 `scripts/apply-fork-links.py` 复制/替换到
+ * `build/generated/repoConfig/`，不要直接在这里手改链接：
+ *  - owner 为 `Soodok` 时原样输出；
+ *  - Fork 构建自动替换为 `<owner>/Deepseek-Harness-Local-Android`。
+ *
+ * 见 `app/build.gradle.kts` 的 `generateRepoConfig` 任务。
+ */
+object RepoConfig {
+    /** GitHub `OWNER/REPO`，用于 API 与 Release 下载链接。 */
+    const val REPO = "Soodok/Deepseek-Harness-Local-Android"
+
+    /** Releases API 根地址。 */
+    const val API_BASE = "https://api.github.com/repos/Soodok/Deepseek-Harness-Local-Android"
+
+    /** 浏览器可打开的 Releases 页面。 */
+    const val RELEASES_PAGE = "https://github.com/Soodok/Deepseek-Harness-Local-Android/releases"
+
+    /** 运行时索引 / 运行时资产的固定下载前缀（latest Release）。 */
+    const val RELEASES_LATEST = "https://github.com/Soodok/Deepseek-Harness-Local-Android/releases/latest/download"
+
+    /** 某个 tag 的资产前缀。 */
+    fun releaseDownload(tag: String): String =
+        "https://github.com/Soodok/Deepseek-Harness-Local-Android/releases/download/$tag"
+}

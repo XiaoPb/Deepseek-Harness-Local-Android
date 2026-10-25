@@ -8,7 +8,7 @@
 #   GITHUB_REF_NAME / GITHUB_SHA / GITHUB_REPOSITORY
 #   APK_DIR                APK 目录（默认 apk）
 #   RELEASE_CERT_SHA256    正式签名证书指纹（可选，仓库 Variable）
-#   HARDSSH_REF            内置 dsh-hardssh 的提交（可选，workflow env）
+#   HARDSSH_VERSION        内置 dsh-hardssh 的 npm 版本（可选，workflow env）
 #
 # 规则（参考 combridge-rust 的发布 job）:
 #   · tag 模式：变更范围 = 上一个语义化版本 tag..当前 tag；没有旧 tag 时取最近 30 个提交
@@ -150,7 +150,7 @@ while IFS=$'\t' read -r short subject; do
   printf -- '- %s (`%s`)\n' "$subject" "$short" >> "$TMP/$type.md"
 done < <(git log "${LOG_ARGS[@]}" --pretty=format:'%h%x09%s%n')
 
-# 安装包清单：文件名 / 架构 / 类型 / 大小 / SHA-256
+# 安装包清单：文件名 / 架构 / 形态 / 类型 / 大小 / SHA-256
 : > "$TMP/assets.md"
 if [ -d "$APK_DIR" ]; then
   while IFS= read -r file; do
@@ -162,18 +162,22 @@ if [ -d "$APK_DIR" ]; then
     esac
     variant=unknown
     case "$name" in
-      *-release.apk) variant=release ;;
-      *-debug.apk) variant=debug ;;
+      *-release.apk|*-release-noruntime.apk) variant=release ;;
+      *-debug.apk|*-debug-noruntime.apk) variant=debug ;;
+    esac
+    pkg=full
+    case "$name" in
+      *-noruntime.apk) pkg=noruntime ;;
     esac
     size=$(du -h "$file" | cut -f1)
     sha=$(sha256sum "$file" | cut -d' ' -f1 | sed 's/^\\//')
-    printf '| `%s` | %s | %s | %s | `%s` |\n' "$name" "$abi" "$variant" "$size" "$sha" >> "$TMP/assets.md"
+    printf '| `%s` | %s | %s | %s | %s | `%s` |\n' "$name" "$abi" "$pkg" "$variant" "$size" "$sha" >> "$TMP/assets.md"
   done < <(find "$APK_DIR" -maxdepth 1 -type f -name '*.apk' | sort)
 fi
 
 BUILD_TIME=$(date -u '+%Y-%m-%d %H:%M UTC')
 CERT="${RELEASE_CERT_SHA256:-}"
-PLUGIN_REF="${HARDSSH_REF:-}"
+PLUGIN_REF="${HARDSSH_VERSION:-}"
 
 {
   if [ "$MODE" != "tag" ]; then
@@ -193,14 +197,14 @@ PLUGIN_REF="${HARDSSH_REF:-}"
   echo "| 架构 | arm64-v8a（真机）/ x86_64（模拟器） |"
   echo "| 签名 | 正式签名（release）/ debug 签名（debug） |"
   if [ -n "$PLUGIN_REF" ]; then
-    echo "| 内置 SSH 插件 | \`${PLUGIN_REF}\` |"
+    echo "| 内置 SSH 插件（npm） | \`${PLUGIN_REF}\` |"
   fi
   echo ""
   echo "## 安装包"
   echo ""
   if [ -s "$TMP/assets.md" ]; then
-    echo "| 文件 | 架构 | 类型 | 大小 | SHA-256 |"
-    echo "| --- | --- | --- | --- | --- |"
+    echo "| 文件 | 架构 | 形态 | 类型 | 大小 | SHA-256 |"
+    echo "| --- | --- | --- | --- | --- | --- |"
     cat "$TMP/assets.md"
   else
     echo "未找到构建产物。"
