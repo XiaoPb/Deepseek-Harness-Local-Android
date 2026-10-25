@@ -79,6 +79,7 @@ class AboutActivity : Activity() {
 
     private fun checkRuntime() {
         val tv = findViewById<TextView>(R.id.txtRuntime)
+        pendingRuntime = null
         tv.text = getString(R.string.about_runtime_checking)
         tv.setTextColor(0xFF8A94A3.toInt())
         val abi = deviceAbi()
@@ -97,7 +98,7 @@ class AboutActivity : Activity() {
                         tv.setTextColor(0xFF8A94A3.toInt())
                     }
                     entry.version == installedRuntimeVersion() -> {
-                        tv.text = getString(R.string.about_runtime_latest)
+                        tv.text = getString(R.string.about_runtime_latest, entry.version)
                         tv.setTextColor(0xFF81C995.toInt())
                     }
                     else -> {
@@ -149,9 +150,9 @@ class AboutActivity : Activity() {
         }, "runtime-install").apply { isDaemon = true; start() }
     }
 
-    private fun deviceAbi(): String = when {
-        Build.SUPPORTED_ABIS.contains("arm64-v8a") -> "arm64-v8a"
-        Build.SUPPORTED_ABIS.contains("x86_64") -> "x86_64"
+    private fun deviceAbi(): String = when (Build.SUPPORTED_ABIS.firstOrNull()) {
+        "arm64-v8a" -> "arm64-v8a"
+        "x86_64" -> "x86_64"
         else -> Build.SUPPORTED_ABIS.firstOrNull().orEmpty()
     }
 

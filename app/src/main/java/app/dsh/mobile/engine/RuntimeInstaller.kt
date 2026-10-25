@@ -280,9 +280,9 @@ class RuntimeInstaller(private val ctx: Context) {
     }.getOrDefault(false)
 
     /** 设备主 ABI（manifest 里通常已有，legacy 包兜底）。 */
-    private fun defaultAbi(): String = when {
-        Build.SUPPORTED_ABIS.contains("arm64-v8a") -> "arm64-v8a"
-        Build.SUPPORTED_ABIS.contains("x86_64") -> "x86_64"
+    private fun defaultAbi(): String = when (Build.SUPPORTED_ABIS.firstOrNull()) {
+        "arm64-v8a" -> "arm64-v8a"
+        "x86_64" -> "x86_64"
         else -> Build.SUPPORTED_ABIS.firstOrNull().orEmpty()
     }
 
@@ -338,15 +338,11 @@ class RuntimeInstaller(private val ctx: Context) {
     private val EM_AARCH64 = 183
 
     /** 本机主 ABI 对应的 e_machine；无法判定返回 -1（此时跳过校验，不误伤） */
-    private fun expectedElfMachine(): Int {
-        for (abi in android.os.Build.SUPPORTED_ABIS) {
-            when (abi) {
-                "arm64-v8a" -> return EM_AARCH64
-                "x86_64" -> return EM_X86_64
-                "armeabi-v7a", "armeabi" -> return EM_ARM
-            }
-        }
-        return -1
+    private fun expectedElfMachine(): Int = when (Build.SUPPORTED_ABIS.firstOrNull()) {
+        "arm64-v8a" -> EM_AARCH64
+        "x86_64" -> EM_X86_64
+        "armeabi-v7a", "armeabi" -> EM_ARM
+        else -> -1
     }
 
     /** 读 ELF 头的 e_machine；读不到 / 不是 ELF 返回 -1 */
@@ -506,7 +502,11 @@ class RuntimeInstaller(private val ctx: Context) {
                     )
                 requireFree(unpackMb * 2 + mb(expectedSize) + 300)
                 Log.i(TAG, "downloading runtime ${info.version} from $urls")
+                BootTrace.stage(BootTrace.Stage.DOWNLOADING)
+                onProgress(0f)
                 HttpDownloader(ctx).download(urls, assetZip, expected, expectedSize) { frac ->
+                    // 下载占进度条前 45%，解压占后 55%，避免进度条回到 0 再走一遍。
+                    onProgress(frac * 0.45f)
                     if (expectedSize > 0) {
                         runCatching {
                             onDetail(
@@ -525,6 +525,7 @@ class RuntimeInstaller(private val ctx: Context) {
             // v1.3.3（issue #23）：解压前断言架构。必须在**删除旧 runtime 之前**做 ——
             // 否则发现架构不对时旧环境已经被拆了，用户从「启动失败」退化成「什么都没了」。
             assertAssetArch(assetZip)
+            BootTrace.stage(BootTrace.Stage.EXTRACTING)
 
             // v1.2.21 事故修复：绝不 root.deleteRecursively()（会把 extensions/ 一起删）。
             // v1.4.20：先解压到 engine.staging，校验通过后再逐个顶层条目换名；
@@ -543,7 +544,12 @@ class RuntimeInstaller(private val ctx: Context) {
                 }
             }
 
-            unzip(assetZip, staging, onProgress, onDetail)
+            unzip(
+                assetZip,
+                staging,
+                onProgress = { p -> onProgress(if (bundled) p else 0.45f + p * 0.55f) },
+                onDetail = onDetail,
+            )
             restoreExecBits(staging)
             check(isRootCompleteAt(staging)) {
                 "staged runtime incomplete (${staging.absolutePath})"

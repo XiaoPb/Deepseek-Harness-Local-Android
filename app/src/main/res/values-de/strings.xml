@@ -493,6 +493,7 @@ Sie können auch ohne Update fortfahren, die Oberfläche wird dann aber nicht an
     <string name="splash_loading">Oberfläche wird geladen…</string>
     <string name="splash_hint">Bitte warte ein paar Sekunden…</string>
     <string name="splash_extracting">Laufzeit wird entpackt…</string>
+    <string name="splash_downloading">Laufzeit wird heruntergeladen…</string>
     <string name="splash_failed">Start fehlgeschlagen</string>
     <string name="splash_elapsed">%1$s · %2$s</string>
     <string name="splash_files">%1$,d / %2$,d Dateien</string>
@@ -507,6 +508,7 @@ Sie können auch ohne Update fortfahren, die Oberfläche wird dann aber nicht an
     <string name="boot_step_bridge">Fähigkeits-Bridge starten</string>
     <string name="boot_step_owner">Dateieigentümer prüfen</string>
     <string name="boot_step_runtime">Laufzeit entpacken</string>
+    <string name="boot_step_download">Laufzeit herunterladen</string>
     <string name="boot_step_userdata">Benutzerdaten verknüpfen</string>
     <string name="boot_step_spawn">Engine-Prozess starten</string>
     <string name="boot_step_health">Auf Health-Check warten</string>
@@ -617,7 +619,7 @@ Sie können auch ohne Update fortfahren, die Oberfläche wird dann aber nicht an
     <string name="about_runtime_idle">Auf Runtime-Updates prüfen</string>
     <string name="about_runtime_checking">Runtime wird geprüft…</string>
     <string name="about_runtime_available">Runtime %1$s verfügbar – zum Installieren tippen</string>
-    <string name="about_runtime_latest">Runtime ist aktuell</string>
+    <string name="about_runtime_latest">Laufzeit %1$s ist aktuell</string>
     <string name="about_runtime_failed">Runtime-Prüfung fehlgeschlagen: %1$s</string>
     <string name="about_runtime_installing">Runtime wird installiert… %1$d%%</string>
     <string name="about_runtime_installed">Runtime installiert – Engine wird neu gestartet</string>

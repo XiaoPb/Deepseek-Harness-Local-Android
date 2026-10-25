@@ -39,6 +39,9 @@ object BootTrace {
         /** 属性自愈 / 种子 / 孤儿回收 / 桥 —— 还没开始动运行时 */
         PREPARING,
 
+        /** 正在下载 noruntime 运行时（有确定性的字节进度） */
+        DOWNLOADING,
+
         /** 正在解压运行时（有确定性的文件与字节进度） */
         EXTRACTING,
 

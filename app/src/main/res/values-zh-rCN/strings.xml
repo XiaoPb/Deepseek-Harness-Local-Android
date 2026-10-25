@@ -483,6 +483,7 @@
     <string name="splash_loading">正在加载界面…</string>
     <string name="splash_hint">请稍等几秒…</string>
     <string name="splash_extracting">正在解压运行环境…</string>
+    <string name="splash_downloading">正在下载运行环境…</string>
     <string name="splash_failed">启动失败</string>
     <string name="splash_elapsed">%1$s · %2$s</string>
     <string name="splash_files">%1$,d / %2$,d 个文件</string>
@@ -497,6 +498,7 @@
     <string name="boot_step_bridge">启动能力桥</string>
     <string name="boot_step_owner">检查文件属主</string>
     <string name="boot_step_runtime">解压运行环境</string>
+    <string name="boot_step_download">下载运行环境</string>
     <string name="boot_step_userdata">链接用户数据</string>
     <string name="boot_step_spawn">拉起引擎进程</string>
     <string name="boot_step_health">等待健康检查</string>
@@ -607,7 +609,7 @@
     <string name="about_runtime_idle">检查运行时更新</string>
     <string name="about_runtime_checking">正在检查运行时…</string>
     <string name="about_runtime_available">运行时 %1$s 可用，点击安装</string>
-    <string name="about_runtime_latest">运行时已是最新</string>
+    <string name="about_runtime_latest">运行时 %1$s 已是最新</string>
     <string name="about_runtime_failed">运行时检查失败：%1$s</string>
     <string name="about_runtime_installing">正在安装运行时… %1$d%%</string>
     <string name="about_runtime_installed">运行时已安装，正在重启引擎</string>
