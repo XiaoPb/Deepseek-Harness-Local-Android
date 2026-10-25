@@ -2163,3 +2163,26 @@ URL: https://github.com/Soodok/Deepseek-Harness-Local-Android/releases/tag/v1.4.
   `scripts/make-lite-runtime.py`，但直接删包会导致 office-to-pdf 的 Cordis 依赖链
   断裂，进而 directory-picker/workspace 等核心服务不可用。正确解法是「overlay 里
   disabled: true + 只剔静态资源」，实验做到一半用户叫停。用户确认「先不管」。
+
+---
+
+## v1.4.20 运行时分发解耦（2026-10-25 进行中）
+
+### 目标
+- APK 双形态：`full`（内嵌 `runtime.zip`）与 `noruntime`（首启/关于页下载）；tag/preview 各 8 个 APK，edge 只发 4 个 noruntime。
+- hardssh 与 runtime 解耦：CI 从上游 `XiaoPb/dsh-hardssh` Release 取 tgz（用 npm integrity 校验），组装成 `assets/hardssh/`；App 启动由 `HardsshInstaller` 补装，runtime 重装后自动恢复。
+- 运行时单一流水线 `scripts/build-runtime.sh`：collect → zod/SONAME 去重 → 补丁/闭包/架构校验 → `BUILD.json` + `runtime.json`。
+- 生成式 assets：`app/build.gradle.kts` 的 `prepareRuntimeAssets` 写 `build/generated/runtimeAssets/`；参数 `-Ppackage=full|noruntime`、`-PruntimeZip`、`-PhardsshDir`、`-PruntimeUrlBase`；不再改工作树。
+- MANIFEST schema v2：runtime urls 直连 + `gh-proxy.org`、hardssh 元数据、`updates.indexUrl`。
+- 云端索引：tag Release 内 `runtime-index.json` + `.sig`；App 从 `releases/latest/download/runtime-index.json` 读取并验签。**不新增 runtime 渠道**。
+- 索引签名复用 APK 正式 keystore：CI 从 `RELEASE_KEYSTORE_BASE64` 解 PKCS12 取私钥（RSA/SHA256withRSA），App 内置证书公钥验签；不新增 secret。
+- Fork 自动更新链接：`scripts/apply-fork-links.py` 在构建期把模板里的 `Soodok/Deepseek-Harness-Local-Android` 替换为 `<owner>/Deepseek-Harness-Local-Android`，生成 `RepoConfig.kt`；Soodok 原样不动。
+- 安装健壮性：`HttpDownloader`（续传/URL 回退/sha）+ `engine.staging` 校验后换名、失败从 `engine.old` 回滚；空间预算按旧 + staging + zip 峰值。
+
+### 关键文件
+`scripts/pack-hardssh.sh`、`scripts/build-runtime.sh`、`scripts/write-runtime-manifest.py`、`scripts/write-runtime-index.py`、`scripts/sign-runtime-index.py`、`scripts/apply-fork-links.py`、`scripts/verify-apk-assets.py`、`app/src/main/java/app/dsh/mobile/engine/{HardsshInstaller,RuntimeIndexClient,HttpDownloader,RuntimeInstaller}.kt`、`app/src/main/java/app/dsh/mobile/engine/RepoConfig.kt.tmpl`。
+
+### 待验证
+- CI 首跑（本地按用户要求未编译）：Gradle `-Ppackage` 生成式 assets、2×2 矩阵、tag 的 index 签名。
+- 真机首启 noruntime 下载/续传/代理、runtime 重装后 SSH 恢复、完整包不被旧内置运行时降级。
+
