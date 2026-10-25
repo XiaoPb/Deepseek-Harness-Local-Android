@@ -539,6 +539,35 @@ jobs:
           done
           ls -lh release/
 
+      - name: 生成并签名 runtime-index.json
+        env:
+          RUNTIME_INDEX_SIGNING_KEY: ${{ secrets.RUNTIME_INDEX_SIGNING_KEY }}
+          RUNTIME_INDEX_KEY_ID: ${{ vars.RUNTIME_INDEX_KEY_ID }}
+        run: |
+          set -euo pipefail
+          test -n "$RUNTIME_INDEX_SIGNING_KEY" || {
+            echo "::error::缺少 RUNTIME_INDEX_SIGNING_KEY secret（见 docs/RELEASE.md）"; exit 1; }
+          KEY=/tmp/runtime-index-signing-key.pem
+          printf '%s' "$RUNTIME_INDEX_SIGNING_KEY" | base64 -d > "$KEY"
+          chmod 600 "$KEY"
+          VC=$(grep -oP 'versionCode\s*=\s*\K[0-9]+' app/build.gradle.kts | head -1)
+          KEY_ID="${RUNTIME_INDEX_KEY_ID:-runtime-2026-10}"
+          python3 scripts/write-runtime-index.py \
+            --repo "$GITHUB_REPOSITORY" \
+            --tag "$GITHUB_REF_NAME" \
+            --meta runtime-dist/runtime-meta-arm64-v8a/runtime-meta.json \
+            --meta runtime-dist/runtime-meta-x86_64/runtime-meta.json \
+            --app-version-code "$VC" \
+            --key-id "$KEY_ID" \
+            --out release/runtime-index.json
+          python3 scripts/sign-runtime-index.py --key "$KEY" \
+            --in release/runtime-index.json --out release/runtime-index.json.sig
+          python3 scripts/sign-runtime-index.py --verify \
+            --pubkey app/src/main/res/raw/runtime_index_pub.pem \
+            --in release/runtime-index.json --sig release/runtime-index.json.sig
+          rm -f "$KEY"
+          ls -lh release/
+
       - name: 生成发布说明
         env:
           APK_DIR: apk
@@ -555,6 +584,8 @@ jobs:
           files: |
             apk/*.apk
             release/*.zip
+            release/*.json
+            release/*.sig
           fail_on_unmatched_files: true
           draft: false
           prerelease: false
