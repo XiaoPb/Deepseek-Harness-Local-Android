@@ -221,7 +221,7 @@ Alternatively, fork the repo and run the **android-build** workflow on GitHub Ac
 
 **Does it require Root?** No. Normal mode covers the vast majority of use cases; Root/Shizuku are optional advanced tiers.
 
-**How does this relate to the Termux approach?** Parallel routes, not replacements. The Termux route **builds a Linux environment** on Android (manual setup / one-click script / proot + Ubuntu) and runs dsh inside it; this project **packs dsh's runtime into the APK** so you install and go, at the cost of a ~227 MB package. **Both run the same dsh** — choose by how much setup cost you're willing to pay for a live environment.
+**How does this relate to the Termux approach?** Parallel routes, not replacements. The Termux route **builds a Linux environment** on Android (manual setup / one-click script / proot + Ubuntu) and runs dsh inside it; this project **packs dsh's runtime into the APK** (full) or downloads it on first launch (noruntime), so install-and-go stays possible. **Both run the same dsh** — choose by how much setup cost you're willing to pay for a live environment.
 
 **Does it reimplement the agent itself?** No. Agent logic, plugin system, and WebUI all come from the official [`@deepseek-ai/dsh`](https://github.com/deepseek-ai/deepseek-harness); this project only provides the Android-side runtime (bionic Node.js runtime, foreground service, privilege tiers, Extension Center). That is why it is described as a **port**, not a framework.
 

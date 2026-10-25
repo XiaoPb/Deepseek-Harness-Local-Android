@@ -213,7 +213,7 @@ Alternativ: Forke das Repository und lasse den Workflow **android-build** auf Gi
 
 **Werden meine Daten hochgeladen?** Engine, Sitzungen und Arbeitsbereich liegen vollständig lokal; ob Daten das Gerät verlassen, hängt vom von dir konfigurierten Modell-Dienstendpunkt ab.
 
-**Warum ist die APK ~227 MB groß?** Sie enthält die vollständige bionic-Node.js-Laufzeit (~494 MB entpackt), den Termux-Toolchain-Abschluss (bash / ripgrep / SONAME-Bibliotheken), dshs gesamten Abhängigkeitsbaum (79 Pakete ab 0.2.0) sowie das integrierte SSH-Workspace-Plugin (ab v1.4.18) — der Preis für „ohne Termux, installieren und loslegen". Termux-Lösungen lassen all das extern und vom Nutzer installiert, sind deshalb kleiner, brauchen aber beim ersten Start Minuten an Einrichtung.
+**Warum ist die APK groß?** Die Vollversion enthält die vollständige bionic-Node.js-Laufzeit (~494 MB entpackt), den Termux-Toolchain-Abschluss und dshs Abhängigkeitsbaum. Seit v1.4.20 gibt es zusätzlich ein **noruntime-Paket** ohne Laufzeit: App-Updates bleiben klein, die Laufzeit wird beim ersten Start geladen und kann separat aktualisiert werden.
 
 **Wie zeigt mir der Agent eine Webseite?** Bitte ihn, einen lokalen HTTP-Server zu starten, und er übergibt dir einen `http://127.0.0.1:<Port>`-Link; tippe darauf, um die Vorschau zu öffnen.
 
