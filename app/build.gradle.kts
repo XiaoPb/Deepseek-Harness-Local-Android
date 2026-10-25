@@ -1,5 +1,7 @@
 import java.io.File
 import java.security.MessageDigest
+import java.security.cert.CertificateFactory
+import java.util.Base64
 import java.util.Properties
 import java.util.zip.ZipFile
 
@@ -109,10 +111,10 @@ fun extractPublicKeyPem(keystore: File, password: String, alias: String): String
         val p = pb.start()
         val output = p.inputStream.bufferedReader().readText()
         if (p.waitFor() != 0) throw GradleException("keytool exportcert failed: $output")
-        val cert = java.security.cert.CertificateFactory.getInstance("X.509")
+        val cert = CertificateFactory.getInstance("X.509")
             .generateCertificate(certFile.inputStream())
         val der = cert.publicKey.encoded
-        val b64 = java.util.Base64.getMimeEncoder(64, byteArrayOf('\n'.code.toByte())).encodeToString(der)
+        val b64 = Base64.getMimeEncoder(64, byteArrayOf('\n'.code.toByte())).encodeToString(der)
         return "-----BEGIN PUBLIC KEY-----\n$b64\n-----END PUBLIC KEY-----\n"
     } finally {
         certFile.delete()
@@ -264,7 +266,7 @@ val proxyBaseProp = (project.findProperty("proxyBase") as String?) ?: "https://g
 val runtimeUrlBaseProp = (project.findProperty("runtimeUrlBase") as String?)?.takeIf { it.isNotBlank() }
 
 fun inferredRuntimeUrlBase(): String {
-    if (!runtimeUrlBaseProp.isNullOrBlank()) return runtimeUrlBaseProp!!
+    if (!runtimeUrlBaseProp.isNullOrBlank()) return runtimeUrlBaseProp
     // CI 里 tag 用 tag 归档；main（edge/preview）用 latest 稳定运行时
     val refType = System.getenv("GITHUB_REF_TYPE")
     val refName = System.getenv("GITHUB_REF_NAME")?.replace("/", "-")
@@ -315,7 +317,7 @@ val prepareRuntimeAssets by tasks.registering {
                 )
 
             fun zipText(zipFile: File, entry: String): String = runCatching {
-                java.util.zip.ZipFile(zipFile).use { zf ->
+                ZipFile(zipFile).use { zf ->
                     val e = zf.getEntry(entry) ?: return@use ""
                     zf.getInputStream(e).bufferedReader().readText()
                 }
