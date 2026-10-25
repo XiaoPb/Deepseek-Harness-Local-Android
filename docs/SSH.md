@@ -1,7 +1,11 @@
-# 内置 SSH 远程工作区（@tiphareth/dsh-hardssh）
+# 内置 SSH 远程工作区（@xiaopb/dsh-hardssh）
 
-DSH Mobile 默认内置 [@tiphareth/dsh-hardssh](https://github.com/tiphareth0/dsh-hardssh)：
+DSH Mobile 默认内置 [@xiaopb/dsh-hardssh](https://github.com/XiaoPb/dsh-hardssh)：
 手机直连服务器，把远端目录当作工作区改代码、跑测试、查日志，不需要在手机上另装插件。
+
+> 这是 XiaoPb fork 的版本（v0.2.11 起 npm 包名由 `@tiphareth/dsh-hardssh` 改为
+> `@xiaopb/dsh-hardssh`）。旧名只用于让位判断：用户自己装过旧包时，内置层会跳过，
+> 避免同一组 hardssh 行被应用两次。
 
 > **源码不进本仓库。** 构建时由 CI 从 GitHub 固定提交拉取源码并编译，产物随
 > `runtime.zip` 打进 APK（见 [android-build.yml](../.github/workflows/android-build.yml)
@@ -36,9 +40,9 @@ DSH Mobile 默认内置 [@tiphareth/dsh-hardssh](https://github.com/tiphareth0/d
    `package.json` / `lib/*.js` / `cordis.patch.yml` / 依赖（`ssh2`、`ws`）。
    `ssh2` 的原生加速是可选的，打包时用 `--omit=optional` 排除，Android 上走纯 JS 回退。
 2. **打包期**：`scripts/inject-hardssh-plugin.sh` 把它放进 runtime 的
-   `lib/node_modules/@tiphareth/dsh-hardssh`，与引擎同生命周期（升级 runtime 即升级插件）。
+   `lib/node_modules/@xiaopb/dsh-hardssh`，与引擎同生命周期（升级 runtime 即升级插件）。
 3. **启动期**（`EngineConfig.ensureBundledSshPlugin`）：
-   - 在 `$DSH_HOME/profiles/node_modules/@tiphareth/dsh-hardssh` 建一条指向引擎目录的链接，
+   - 在 `$DSH_HOME/profiles/node_modules/@xiaopb/dsh-hardssh` 建一条指向引擎目录的链接，
      让 dsh 的 Loader 能从 web profile 解析到插件名（不复制文件）；
    - 把插件自带的 `cordis.patch.yml` 作为**第一个 `--patch` 层**传给引擎：
      它会禁用内置的 `fs-sandbox` / `subprocess` 行，插入 `hardssh` / `hardssh-fs` /
@@ -117,7 +121,7 @@ Android 没有桌面端的系统文件夹选择框，DSH 内核固定使用 **br
 ## 排障
 
 - 设置 → 自检：若出现 SSH 相关告警，先确认 runtime 里插件文件存在：
-  `files/engine/lib/node_modules/@tiphareth/dsh-hardssh/package.json`。
+  `files/engine/lib/node_modules/@xiaopb/dsh-hardssh/package.json`。
 - `engine.log` 里搜 `hardssh`：加载失败会以
   `warning: N entries did not activate` 的形式列出具体行（不会阻断引擎启动）。
 - 插件未启用时，左侧栏不会出现「SSH 工作区」入口，右侧栏也没有「SSH」标签。

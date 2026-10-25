@@ -133,9 +133,10 @@ dsh-android-v1.4.18-x86_64-release.apk
 > - `*-release.apk`：正式签名，可覆盖升级；`*-debug.apk`：debug 签名，仅测试，不能覆盖正式版。
 > - **edge** 是一个滚动 pre-release（tag `edge`），每次 `main` 推送覆盖同名资产，方便用户随时下载；
 >   `v*` tag 才是正式版本。
-> - `publish-release` / `publish-edge` 只对 `XiaoPb/Deepseek-Harness-Local-Android` 生效
->   （硬门禁，避免 fork 误发）。旧 `release` job（debug 自动发布）仅用于
->   `jahdaganj02ki-sketch/...`，两者互不影响。
+> - `publish-release` / `publish-edge` / `release` 默认只对
+>   `Soodok/Deepseek-Harness-Local-Android` 生效。Fork 用户若想自己编译并发布，
+>   在仓库 **Settings → Secrets and variables → Actions → Variables** 新建
+>   `ENABLE_CI_IN_FORK=true` 即可（PR 仍不发；签名材料需自行配置）。
 
 ---
 

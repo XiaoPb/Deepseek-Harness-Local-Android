@@ -68,7 +68,7 @@ DSH Mobile 是 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harnes
 
 ### 🔐 内置 SSH 远程工作区：手机连服务器改代码
 
-默认内置 [@tiphareth/dsh-hardssh](https://github.com/tiphareth0/dsh-hardssh)（构建时由 CI 从 GitHub
+默认内置 [@xiaopb/dsh-hardssh](https://github.com/XiaoPb/dsh-hardssh)（构建时由 CI 从 GitHub
 固定提交拉取源码并编译进 runtime，**插件源码不在本仓库**）：
 
 - **左侧栏「SSH 工作区」**：添加服务器（支持从 `~/.ssh/config` 导入），把远端目录绑定为工作区；绑定后会话里的 `read` / `write` / `edit` / `bash` **直接跑在服务器上**，改代码、跑测试、看日志都不用离开手机
@@ -164,7 +164,7 @@ Agent 通过只监听 `127.0.0.1:3083` 的能力桥操作手机，所有调用�
 | 文档 | 内容 |
 |---|---|
 | [无障碍控制](docs/ACCESSIBILITY.md) | 读屏/点击/输入/滑动/长按/拖拽等 21 种原语；多层视觉兜底、每步验证；实测 ~1.45s/步 |
-| [SSH 远程工作区](docs/SSH.md) | 内置 @tiphareth/dsh-hardssh：远端工作区、Web 终端、隧道与 `ssh_*` 工具；CI 从 GitHub 构建 |
+| [SSH 远程工作区](docs/SSH.md) | 内置 @xiaopb/dsh-hardssh：远端工作区、Web 终端、隧道与 `ssh_*` 工具；CI 从 GitHub 构建 |
 | [闭环设计笔记](docs/LOCAL_CLOSED_LOOP.md) | 端侧决策引擎的设计与演进记录 |
 | [竖屏 UI 插件](docs/NARROW_UI.md) | 侧栏全宽 / 设置面板重构 / 右侧面板全屏（三个客户端插件） |
 | [局域网 WebUI](docs/LAN_WEBUI.md) | 反向代理、6 位验证码、常驻提醒与关闭链路 |
