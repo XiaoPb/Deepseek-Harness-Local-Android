@@ -132,7 +132,10 @@ object RuntimeIndexClient {
         }
     }
 
-    /** SHA256withECDSA / P-256，公钥来自 res/raw/runtime_index_pub.pem。 */
+    /**
+     * 签名校验：默认用 APK 正式签名证书的 RSA-4096 公钥（SHA256withRSA）；
+     * 同时兼容旧的 EC P-256 公钥（SHA256withECDSA），便于轮换。
+     */
     private fun verifySignature(ctx: Context, data: ByteArray, signature: ByteArray): Boolean = runCatching {
         val pem = ctx.resources.openRawResource(R.raw.runtime_index_pub)
             .bufferedReader().use { it.readText() }
@@ -140,8 +143,14 @@ object RuntimeIndexClient {
             pem.replace(Regex("-----[^-]+-----"), "").replace(Regex("\\s"), ""),
             Base64.DEFAULT,
         )
-        val key = KeyFactory.getInstance("EC").generatePublic(X509EncodedKeySpec(der))
-        val sig = Signature.getInstance("SHA256withECDSA")
+        val spec = X509EncodedKeySpec(der)
+        val key = runCatching { KeyFactory.getInstance("EC").generatePublic(spec) }
+            .getOrElse { KeyFactory.getInstance("RSA").generatePublic(spec) }
+        val algorithm = when (key.algorithm) {
+            "RSA" -> "SHA256withRSA"
+            else -> "SHA256withECDSA"
+        }
+        val sig = Signature.getInstance(algorithm)
         sig.initVerify(key)
         sig.update(data)
         sig.verify(Base64.decode(String(signature, Charsets.US_ASCII).trim(), Base64.DEFAULT))
