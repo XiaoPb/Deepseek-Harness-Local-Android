@@ -141,7 +141,7 @@ val generateIndexPubKey by tasks.registering {
             }
             else -> ""
         }
-        outFile.writeText(pem)
+        outFile.writeText(pem.ifBlank { "\n" })
         if (pem.isBlank()) {
             logger.lifecycle("index pubkey: none (cloud runtime updates disabled for this build)")
         } else {
