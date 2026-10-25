@@ -14,6 +14,9 @@ import java.util.Locale
  * - tool_input: 桥侧已经裁过的摘要对象，只有 file_path / command / pattern / query 四种键
  * - caller_pid: 引擎进程 pid（只用于诊断，不做鉴权）
  *
+ * 鉴权（v1.4.21）：POST /bubble 还须带 [TOKEN_HEADER] 头（值 = 引擎环境变量
+ * DSH_PET_BRIDGE_TOKEN）；缺失/不匹配一律 403。协议版本升为 protocol 2。
+ *
  * 注意：协议里**没有气泡文本**。气泡由原生侧根据 kind + tool_name + tool_input 拼。
  */
 data class PetEvent(
@@ -32,6 +35,12 @@ object PetProtocol {
     const val MAX_HEADER_BYTES = 8 * 1024
     const val MAX_TOOL_NAME_CHARS = 64
     const val MAX_SUMMARY_CHARS = 32
+
+    /**
+     * /bubble 鉴权头（v1.4.21）。值来自引擎环境变量 DSH_PET_BRIDGE_TOKEN
+     * （PetBridgeServer 每进程惰性生成，不落盘），只有引擎内的桥插件拿得到。
+     */
+    const val TOKEN_HEADER = "X-DSH-Pet-Token"
 
     private val KINDS = setOf("user", "pre", "post", "stop", "error", "waiting")
     private val INPUT_KEYS = listOf("file_path", "command", "pattern", "query")

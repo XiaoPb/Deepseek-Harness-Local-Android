@@ -23,6 +23,17 @@ import java.util.concurrent.Executors
  *  - 请求行+头 ≤8KB、body ≤8KB、socket 5s 超时；
  *  - 2 个 worker，避免慢连接把 accept 线程卡住；
  *  - 任何解析失败只回 4xx/5xx，不抛到 Service。
+ *
+ * ## 鉴权（v1.4.21，照抄 AgentBridge v1.2.99 的先例）
+ *
+ * 桥监听 127.0.0.1:7779，未鉴权时**同设备上任何 App** 都能伪造表情/气泡
+ * （弱钓鱼/骚扰面是真实的，评审 PR #48 指出）。因此 `/bubble` 要求请求头
+ * [PetProtocol.TOKEN_HEADER] 等于 [currentToken]；token 每进程惰性生成一次
+ * （不落盘、不复用），经引擎环境变量 `DSH_PET_BRIDGE_TOKEN` 交给
+ * dsh-pet-bridge 插件 —— 只有引擎子进程拿得到，第三方 App 拿不到。
+ *
+ * **fail-closed**：token 校验失败/缺失一律 403，绝不静默放行。
+ * `/ping` 保持免鉴权：响应体只有服务存在性信息，无敏感数据。
  */
 class PetBridgeServer(
     private val onEvent: (PetEvent) -> Unit,
@@ -37,6 +48,20 @@ class PetBridgeServer(
     @Volatile private var acceptThread: Thread? = null
 
     val isRunning: Boolean get() = running
+
+    companion object {
+        @Volatile private var token: String? = null
+
+        /**
+         * 当前桥 token（v1.4.21）。进程内**惰性生成一次**：无论引擎环境变量
+         * 组装（EngineConfig）和 `start()` 谁先发生，读到的都是同一个值，
+         * 不落盘、不复用 —— 第三方 App 拿不到。
+         */
+        fun currentToken(): String =
+            token ?: synchronized(this) {
+                token ?: java.util.UUID.randomUUID().toString().replace("-", "").also { token = it }
+            }
+    }
 
     fun start() {
         if (running) return
@@ -123,6 +148,7 @@ class PetBridgeServer(
 
             var headerBytes = requestLine.length + 2
             var contentLength = 0
+            val headerLines = ArrayList<String>(16)
             while (true) {
                 val line = readLine(input, PetProtocol.MAX_HEADER_BYTES - headerBytes) ?: run {
                     respond(output, 431, "Request Header Fields Too Large")
@@ -134,6 +160,7 @@ class PetBridgeServer(
                     respond(output, 431, "Request Header Fields Too Large")
                     return
                 }
+                headerLines.add(line)
                 val idx = line.indexOf(':')
                 if (idx <= 0) continue
                 val name = line.substring(0, idx).trim()
@@ -146,7 +173,7 @@ class PetBridgeServer(
             if (method == "GET" && path == "/ping") {
                 respond(
                     output, 200, "OK",
-                    """{"ok":true,"service":"pet-overlay","protocol":1}""",
+                    """{"ok":true,"service":"pet-overlay","protocol":2}""",
                     "application/json",
                 )
                 return
@@ -157,6 +184,13 @@ class PetBridgeServer(
             }
             if (method != "POST") {
                 respond(output, 405, "Method Not Allowed")
+                return
+            }
+            // 鉴权（v1.4.21）：/bubble 必须带 X-DSH-Pet-Token 且等于当前 token。
+            // fail-closed：缺失/不匹配一律 403 —— 桌宠只玩表情/气泡，但也不给
+            // 同设备第三方 App 免费刷存在感的通道（评审 PR #48）。
+            if (!authorised(headerLines)) {
+                respond(output, 403, "Forbidden")
                 return
             }
             if (contentLength <= 0 || contentLength > PetProtocol.MAX_BODY_BYTES) {
@@ -190,6 +224,19 @@ class PetBridgeServer(
         } finally {
             runCatching { client.close() }
         }
+    }
+
+    /** 校验请求头：`X-DSH-Pet-Token` 必须等于当前 token（fail-closed，见类注释）。 */
+    private fun authorised(headerLines: List<String>): Boolean {
+        val expected = currentToken()
+        for (line in headerLines) {
+            if (line.startsWith(PetProtocol.TOKEN_HEADER, ignoreCase = true) &&
+                line.getOrNull(PetProtocol.TOKEN_HEADER.length) == ':'
+            ) {
+                return line.substringAfter(':').trim() == expected
+            }
+        }
+        return false
     }
 
     private fun respond(

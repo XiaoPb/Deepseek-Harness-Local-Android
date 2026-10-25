@@ -1,6 +1,7 @@
 package app.dsh.mobile.engine
 
 import android.util.Log
+import app.dsh.mobile.pet.PetBridgeServer
 import java.io.File
 import java.nio.file.Files
 
@@ -1362,6 +1363,9 @@ object EngineConfig {
             // 桥 token（v1.2.99）：只交给引擎子进程，供 scr/notify 等闸门脚本鉴权。
             // 第三方 App 拿不到 → 无法调用读屏/点击/通知等设备能力。
             "DSH_BRIDGE_TOKEN=${AgentBridge.currentToken().orEmpty()}",
+            // 桌宠桥 token（v1.4.21，PR #48 评审）：dsh-pet-bridge 插件 POST
+            // /bubble 时带 X-DSH-Pet-Token 头；惰性生成，进程内稳定，不落盘。
+            "DSH_PET_BRIDGE_TOKEN=${PetBridgeServer.currentToken()}",
             "LD_LIBRARY_PATH=" + (
                 listOf(File(root, "lib"), File(root, "usr/lib")) +
                     extRoots.map { File(it, "lib") }
