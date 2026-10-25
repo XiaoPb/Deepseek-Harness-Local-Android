@@ -25,6 +25,8 @@ val updateRepo = (project.findProperty("updateRepo") as String?)
 val repoConfigDir = layout.buildDirectory.dir("generated/repoConfig").get().asFile
 val runtimeAssetsDir = layout.buildDirectory.dir("generated/runtimeAssets").get().asFile
 val indexResDir = layout.buildDirectory.dir("generated/indexRes").get().asFile
+// AGP 在配置期会检查 sourceSets 目录；先建空目录，任务稍后再填内容。
+listOf(repoConfigDir, runtimeAssetsDir, indexResDir).forEach { it.mkdirs() }
 
 // CI 的 ubuntu runner 通常只有 python3；本地 Windows 只有 python。构建期脚本统一走这里。
 fun hasCommand(cmd: String): Boolean = runCatching {

@@ -7,11 +7,13 @@ import android.util.Base64
 import android.util.Log
 import app.dsh.mobile.R
 import org.json.JSONObject
+import java.io.ByteArrayInputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.security.KeyFactory
 import java.security.PublicKey
 import java.security.Signature
+import java.security.cert.CertificateFactory
 import java.security.spec.X509EncodedKeySpec
 
 /**
@@ -191,10 +193,19 @@ object RuntimeIndexClient {
         val pm = ctx.packageManager
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             val info = pm.getPackageInfo(ctx.packageName, PackageManager.GET_SIGNING_CERTIFICATES)
-            info.signingInfo?.apkContentsSigners?.mapNotNull { it.publicKey } ?: emptyList()
+            info.signingInfo?.apkContentsSigners
+                ?.mapNotNull { signatureToPublicKey(it) }
+                ?: emptyList()
         } else {
             val info = pm.getPackageInfo(ctx.packageName, PackageManager.GET_SIGNATURES)
-            info.signatures?.mapNotNull { it.publicKey } ?: emptyList()
+            info.signatures?.mapNotNull { signatureToPublicKey(it) } ?: emptyList()
         }
     }.getOrDefault(emptyList())
+
+    /** android.content.pm.Signature → X.509 证书 → 公钥（API 36 起 getPublicKey 已移除）。 */
+    private fun signatureToPublicKey(sig: android.content.pm.Signature): PublicKey? = runCatching {
+        CertificateFactory.getInstance("X.509")
+            .generateCertificate(ByteArrayInputStream(sig.toByteArray()))
+            .publicKey
+    }.getOrNull()
 }
