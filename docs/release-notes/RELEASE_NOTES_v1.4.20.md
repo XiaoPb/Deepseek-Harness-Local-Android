@@ -35,7 +35,16 @@ runtime node architecture mismatch: bundled e_machine=183, device expects 62
 
 现在统一改用主 ABI `SUPPORTED_ABIS.first()`；运行时安装器、关于页、自检三处一致。
 
-## 5. 关于页显示已安装版本
+## 5. 原生壳主题：深色 / 浅色 / 跟随系统
+
+- 默认仍为深色；
+- 引导页新增“外观主题”三选一，紧跟在“默认显示方向”之后；
+- 设置 → 显示 → 外观主题，可随时切换；
+- 使用 `values` / `values-night` 两套语义色，覆盖引导页、设置、关于、主界面工具栏、弹窗、图标、启动遮罩；
+- `跟随系统` 时由系统深浅色变化自动重建界面；
+- 只处理原生壳；WebView 内容由 dsh 自己管理。
+
+## 6. 关于页显示已安装版本
 
 已安装且是最新时显示：
 
@@ -52,6 +61,7 @@ runtime node architecture mismatch: bundled e_machine=183, device expects 62
   - 下载完成后 hardssh 0.2.13 安装成功，引擎 Healthy；
   - 左侧栏出现「SSH 工作区」；
   - 关于页显示 x86_64 运行时版本已是最新。
+- 原生主题：引导页深色/浅色切换、设置页深色/浅色切换、下载确认框与主界面工具栏均已检查。
 - CI 重新构建 v1.4.20 四形态 APK 通过。
 
 ## 升级说明
