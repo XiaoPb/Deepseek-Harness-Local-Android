@@ -163,6 +163,21 @@ object SelfCheck {
             out += Item("runtime.arch", "CPU architecture", Item.Status.WARN, it.message ?: "unreadable")
         }
 
+        // v1.4.20：内置 SSH 插件与 runtime 解耦，重装 runtime 后由 HardsshInstaller 补装。
+        // 缺失只影响 SSH 工作区，不算运行时故障。
+        val sshPkg = File(root, "lib/node_modules/@xiaopb/dsh-hardssh/package.json")
+        out += if (sshPkg.isFile) {
+            val ver = runCatching {
+                org.json.JSONObject(sshPkg.readText()).optString("version")
+            }.getOrDefault("?")
+            Item("runtime.ssh", "Bundled SSH plugin", Item.Status.OK, "v$ver")
+        } else {
+            Item(
+                "runtime.ssh", "Bundled SSH plugin", Item.Status.WARN,
+                "not installed (SSH workspace disabled)",
+            )
+        }
+
         return out
     }
 

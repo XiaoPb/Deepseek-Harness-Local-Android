@@ -7,9 +7,12 @@ DSH Mobile 默认内置 [@xiaopb/dsh-hardssh](https://github.com/XiaoPb/dsh-hard
 > `@xiaopb/dsh-hardssh`）。旧名只用于让位判断：用户自己装过旧包时，内置层会跳过，
 > 避免同一组 hardssh 行被应用两次。
 
-> **源码不进本仓库。** 构建时由 CI 从 GitHub 固定提交拉取源码并编译，产物随
-> `runtime.zip` 打进 APK（见 [android-build.yml](../.github/workflows/android-build.yml)
-> 的 `build-hardssh-plugin` job）。本仓库只保留打包/注入脚本与 App 侧启用逻辑。
+> **源码/发布包都不进本仓库。** 构建时 CI 解析 npm 最新版本，从上游
+> [Release](https://github.com/XiaoPb/dsh-hardssh/releases) 取 tgz（与 npm 包同
+> integrity），组装成 APK 的 `assets/hardssh/` 内置副本（见
+> [pack-hardssh.sh](../scripts/pack-hardssh.sh)、
+> [android-build.yml](../.github/workflows/android-build.yml) 的 `build-hardssh` job）。
+> 插件不再打进 `runtime.zip`，运行时与插件可以各自更新。
 
 ## 入口
 
@@ -35,12 +38,14 @@ DSH Mobile 默认内置 [@xiaopb/dsh-hardssh](https://github.com/XiaoPb/dsh-hard
 
 ## 集成原理（为什么开箱可用）
 
-1. **构建期**：CI 的 `build-hardssh-plugin` job 按 `HARDSSH_REF` 检出源码 →
-   `pnpm install` + `pnpm build` → `scripts/pack-hardssh-plugin.sh` 组装出
+1. **构建期**：CI 用 `npm view` 解析 `@xiaopb/dsh-hardssh` 最新版本 →
+   从上游 Release 下载 `xiaopb-dsh-hardssh-<ver>.tgz`（缺失时回退 `npm pack`）→
+   用 npm `dist.integrity` 校验 → `scripts/pack-hardssh.sh` 组装出
    `package.json` / `lib/*.js` / `cordis.patch.yml` / 依赖（`ssh2`、`ws`）。
    `ssh2` 的原生加速是可选的，打包时用 `--omit=optional` 排除，Android 上走纯 JS 回退。
-2. **打包期**：`scripts/inject-hardssh-plugin.sh` 把它放进 runtime 的
-   `lib/node_modules/@xiaopb/dsh-hardssh`，与引擎同生命周期（升级 runtime 即升级插件）。
+2. **打包期**：`assets/hardssh/` 随 APK 分发；启动时由 `HardsshInstaller` 复制到
+   `engine/lib/node_modules/@xiaopb/dsh-hardssh`。runtime 重装会清掉 `engine/lib`，
+   下次启动自动补装 —— 运行时更新不再丢 SSH。
 3. **启动期**（`EngineConfig.ensureBundledSshPlugin`）：
    - 在 `$DSH_HOME/profiles/node_modules/@xiaopb/dsh-hardssh` 建一条指向引擎目录的链接，
      让 dsh 的 Loader 能从 web profile 解析到插件名（不复制文件）；
@@ -52,8 +57,27 @@ DSH Mobile 默认内置 [@xiaopb/dsh-hardssh](https://github.com/XiaoPb/dsh-hard
 
 ## 升级插件
 
-只改一个地方：`.github/workflows/android-build.yml` 顶部的 `HARDSSH_REF`（commit SHA 最稳，
-也接受 tag / 分支），推上去由 CI 重新构建。运行期不需要联网安装。
+- **随 APK**：装新 APK 即可（构建默认取 npm 最新版；需要钉死时设仓库 Variable
+  `HARDSSH_VERSION`，如 `0.2.13`）。
+- **不装新 APK**：从上游 Release 下载 tgz 后执行标准命令（需要联网，pnpm 会解析
+  `ssh2`/`ws`）：
+
+  ```bash
+  # 下载：https://github.com/XiaoPb/dsh-hardssh/releases
+  dsh plugin --profile web add /sdcard/Download/xiaopb-dsh-hardssh-0.2.13.tgz
+  ```
+
+- 本仓库 Release **不发布** hardssh 包；也不提供 zip。
+
+## 代理下载（可选）
+
+GitHub 直连慢时可用前缀式代理：
+
+```bash
+https://gh-proxy.org/https://github.com/XiaoPb/dsh-hardssh/releases/download/v0.2.13/xiaopb-dsh-hardssh-0.2.13.tgz
+```
+
+下载后应校验 npm `dist.integrity`（`scripts/pack-hardssh.sh` 构建时已强制校验）。
 
 ## 本地目录选择（Android）
 
@@ -120,8 +144,10 @@ Android 没有桌面端的系统文件夹选择框，DSH 内核固定使用 **br
 
 ## 排障
 
-- 设置 → 自检：若出现 SSH 相关告警，先确认 runtime 里插件文件存在：
-  `files/engine/lib/node_modules/@xiaopb/dsh-hardssh/package.json`。
+- 设置 → 自检：若出现 SSH 相关告警，先确认插件已安装到
+  `files/engine/lib/node_modules/@xiaopb/dsh-hardssh/package.json`（APK 内置副本在
+  `assets/hardssh/`，启动时由 `HardsshInstaller` 自动补装；日志 tag 为
+  `HardsshInstaller`）。
 - `engine.log` 里搜 `hardssh`：加载失败会以
   `warning: N entries did not activate` 的形式列出具体行（不会阻断引擎启动）。
 - 插件未启用时，左侧栏不会出现「SSH 工作区」入口，右侧栏也没有「SSH」标签。

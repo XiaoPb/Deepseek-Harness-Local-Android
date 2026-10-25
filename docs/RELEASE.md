@@ -107,38 +107,38 @@ CI 每次 tag 构建都会用 `apksigner verify --print-certs` 比对实际签�
 
 | 触发 | 行为 |
 |---|---|
-| push 分支（非 main）/ PR | 只构建 **debug**（正式签名材料不存在时不跑 `assembleRelease`，不会失败） |
-| push `main` | 构建 debug + release（Gradle 自动签名、`apksigner` 校验证书），更新 **edge 预发布**；缺 secrets 时 edge 任务失败并提示配置（不会发布半套） |
-| 每日 01:30（Asia/Shanghai；cron `30 17 * * *` 是 UTC） | 构建 debug（双架构）→ `publish-preview` 更新滚动预发布 **preview**（只保留最新一版资产）；不需要签名材料 |
-| push tag `v<major>.<minor>.<patch>` | **必须有** `RELEASE_*` secrets：构建 debug + release、校验证书指纹，缺 secret 直接失败；**禁止 `v*.*.*-*`**（首个 job 校验 tag 格式直接失败） |
-| tag 且通过 | `publish-release` 发布双架构 × 双变体到正式 GitHub Release |
+| push 分支（非 main）/ PR | 构建双架构 × full/noruntime 的 **debug**（无签名材料时不跑 release） |
+| push `main` | 构建 8 个变体，**edge 只发布 4 个 noruntime**（debug + release）；缺 secrets 时该腿失败并提示 |
+| 每日 01:30（Asia/Shanghai） | 构建 8 个变体 → **preview** 滚动预发布（debug + release，full + noruntime；需要 `RELEASE_*` 才能凑齐 8 个） |
+| push tag `v<major>.<minor>.<patch>` | 必须 `RELEASE_*`；构建 8 个 APK + 2 个 runtime zip，`publish-release` 发布并归档 |
+| tag 且通过 | `runtime-index.json`（+ `.sig`，Phase 4）随 tag 发布；App 通过 `releases/latest/download/` 读取 |
 
 产物命名（文件名带当前 `versionName`）：
 
 ```
-# main / edge（ref = main，版本段 -v<version>）
-dsh-android-main-arm64-v8a-v1.4.17-debug.apk
-dsh-android-main-arm64-v8a-v1.4.17-release.apk
-dsh-android-main-x86_64-v1.4.17-debug.apk
-dsh-android-main-x86_64-v1.4.17-release.apk
+# main / edge（ref = main）
+dsh-android-main-arm64-v8a-v1.4.19-debug.apk
+dsh-android-main-arm64-v8a-v1.4.19-release.apk
+dsh-android-main-arm64-v8a-v1.4.19-debug-noruntime.apk
+dsh-android-main-arm64-v8a-v1.4.19-release-noruntime.apk
+# x86_64 同理
 
-# tag 发布（ref 本身是 v<version>，不再重复版本段）
-dsh-android-v1.4.18-arm64-v8a-debug.apk
-dsh-android-v1.4.18-arm64-v8a-release.apk
-dsh-android-v1.4.18-x86_64-debug.apk
-dsh-android-v1.4.18-x86_64-release.apk
+# tag 发布
+dsh-android-v1.4.19-arm64-v8a-debug.apk
+dsh-android-v1.4.19-arm64-v8a-release.apk
+dsh-android-v1.4.19-arm64-v8a-debug-noruntime.apk
+dsh-android-v1.4.19-arm64-v8a-release-noruntime.apk
+# x86_64 同理
+runtime-arm64-v8a.zip
+runtime-x86_64.zip
 ```
 
-> - 每次发布完成后会**清理 Release 中不在本次产物列表里的旧文件名**（edge 的滚动资产因此
->   不会残留旧命名）。
-> - `*-release.apk`：正式签名，可覆盖升级；`*-debug.apk`：debug 签名，仅测试，不能覆盖正式版。
-> - **edge** 是一个滚动 pre-release（tag `edge`），每次 `main` 推送覆盖同名资产，方便用户随时下载。
-> - **preview** 是每日 01:30（Asia/Shanghai）定时构建出的滚动 pre-release（tag `preview`，debug 签名，只保留最新一版资产），供预览/试用；
->   正式版本只认严格 tag `v<major>.<minor>.<patch>`，**禁止 `v*.*.*-*`**（如 `v1.4.18-380`）。
-> - `publish-release` / `publish-edge` / `publish-preview` 默认只对
->   `Soodok/Deepseek-Harness-Local-Android` 生效。Fork 用户若想自己编译并发布，
->   在仓库 **Settings → Secrets and variables → Actions → Variables** 新建
->   `ENABLE_CI_IN_FORK=true` 即可（PR 仍不发；签名材料需自行配置）。
+> - `full` 包（无后缀）含 `runtime.zip`，离线可用；`noruntime` 包首启按 `MANIFEST.json` 的链接下载运行时。
+> - tag 的 noruntime 包指向本 tag 的 `runtime-<abi>.zip` 并钉 sha；edge/preview 指向 `releases/latest/download/runtime-<abi>.zip`（无 sha，App 取 index 校验）。
+> - 运行时资产只随 tag Release 发布；**不新增 runtime 渠道**。运行时单独更新 = 打一个新 tag。
+> - 内置 hardssh 由上游 `XiaoPb/dsh-hardssh` Release 的 tgz 组装，本仓库不发布 hardssh 包。
+> - **edge** 是滚动 pre-release（tag `edge`），只含 4 个 noruntime 包；**preview** 每日滚动，含 8 个变体。
+> - Fork 的自动更新链接在构建期由 `scripts/apply-fork-links.py` 自动替换为 `<owner>/Deepseek-Harness-Local-Android`；上游 Soodok 不替换。
 
 ---
 
@@ -169,7 +169,7 @@ dsh-android-v1.4.18-x86_64-release.apk
 - **变更分类**：按 conventional commit 前缀分为 新功能 / 问题修复 / 性能优化 / 重构 /
   构建与依赖 / CI/CD / 文档 / 测试 / 代码风格 / 其他。
 - **版本信息**：tag、`versionName`、`versionCode`、提交短 SHA、提交数量、构建时间（UTC）、
-  架构、签名方式、内置 `dsh-hardssh` 的 `HARDSSH_REF`。
+  架构、签名方式、内置 `dsh-hardssh` 的 npm 版本（`HARDSSH_VERSION`）。
 - **安装包表**：每个 APK 的架构（arm64-v8a / x86_64）、类型（release / debug）、大小、
   SHA-256，方便下载后校验。
 - **签名与安装**：正式 / debug 签名区别、旧证书升级失败时的处理、`apksigner` 校验命令；

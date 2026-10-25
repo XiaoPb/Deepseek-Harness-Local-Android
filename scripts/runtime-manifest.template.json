@@ -1,0 +1,27 @@
+{
+  "_comment": "模板，仅用于说明 assets/runtime/MANIFEST.json 的 schema；实际文件由 scripts/write-runtime-manifest.py 在构建期生成到 build/generated/runtimeAssets/runtime/MANIFEST.json。",
+  "schema": 2,
+  "package": "noruntime",
+  "abi": "arm64-v8a",
+  "builtAt": 1761321600,
+  "runtime": {
+    "version": "2026.10.25-a1b2c3d4",
+    "bundled": false,
+    "url": "https://github.com/Soodok/Deepseek-Harness-Local-Android/releases/latest/download/runtime-arm64-v8a.zip",
+    "urls": [
+      "https://github.com/Soodok/Deepseek-Harness-Local-Android/releases/latest/download/runtime-arm64-v8a.zip",
+      "https://gh-proxy.org/https://github.com/Soodok/Deepseek-Harness-Local-Android/releases/latest/download/runtime-arm64-v8a.zip"
+    ]
+  },
+  "hardssh": {
+    "version": "0.2.13",
+    "bundled": true,
+    "bundleSha256": "",
+    "tgzUrl": "https://github.com/XiaoPb/dsh-hardssh/releases/download/v0.2.13/xiaopb-dsh-hardssh-0.2.13.tgz"
+  },
+  "updates": {
+    "indexUrl": "https://github.com/Soodok/Deepseek-Harness-Local-Android/releases/latest/download/runtime-index.json",
+    "proxies": ["https://gh-proxy.org/"],
+    "allowedHosts": ["github.com", "objects.githubusercontent.com", "gh-proxy.org"]
+  }
+}

@@ -383,16 +383,18 @@ def check_catalogs():
                  % (name, other_ids, base_ids))
         if other.get("mirrors") != base.get("mirrors"):
             fail("%s mirrors differ from catalog.json" % name)
-    # runtime manifest must stay parseable
+    # runtime manifest is generated at build time; validate the schema template instead.
     man = os.path.join(APP, "assets", "runtime", "MANIFEST.json")
-    if os.path.isfile(man):
+    template = os.path.join(ROOT, "scripts", "runtime-manifest.template.json")
+    target = man if os.path.isfile(man) else template
+    if os.path.isfile(target):
         try:
-            m = json.loads(read(man))
-            for k in ("version", "url", "sha256"):
+            m = json.loads(read(target))
+            for k in ("schema", "package", "abi", "runtime", "updates"):
                 if k not in m:
-                    fail("runtime MANIFEST.json missing key '%s'" % k)
+                    fail("%s missing key '%s'" % (os.path.basename(target), k))
         except ValueError as e:
-            fail("runtime MANIFEST.json is not valid JSON: %s" % e)
+            fail("%s is not valid JSON: %s" % (os.path.basename(target), e))
 
 
 def main():

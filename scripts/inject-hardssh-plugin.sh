@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
-# inject-hardssh-plugin.sh —— 把 pack-hardssh-plugin.sh 的产物装进 runtime 根目录。
+# inject-hardssh-plugin.sh —— 【v1.4.20 起已废弃，勿在发布流程使用】
+#
+# hardssh 已与 runtime 解耦：运行时不再包含插件，APK 改为携带 assets/hardssh/
+# 由 App 的 HardsshInstaller 安装（见 scripts/pack-hardssh.sh）。
+# 本脚本仅保留用于本地调试「把插件塞进某个 runtime 目录」的旧场景。
 #
 # 用法: ./scripts/inject-hardssh-plugin.sh <runtime 根目录> <插件目录>
 #

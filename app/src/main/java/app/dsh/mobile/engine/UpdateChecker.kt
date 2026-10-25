@@ -23,10 +23,10 @@ object UpdateChecker {
 
     private const val TAG = "UpdateChecker"
 
-    /** 仓库（与 README 中的开源地址一致） */
-    private const val API = "https://api.github.com/repos/Soodok/Deepseek-Harness-Local-Android/releases"
+    /** 仓库（构建期按 Fork 自动改写，见 RepoConfig.kt.tmpl） */
+    private const val API = RepoConfig.API_BASE + "/releases"
 
-    const val RELEASES_PAGE = "https://github.com/Soodok/Deepseek-Harness-Local-Android/releases"
+    val RELEASES_PAGE: String = RepoConfig.RELEASES_PAGE
 
     private const val CONNECT_TIMEOUT_MS = 10_000
     private const val READ_TIMEOUT_MS = 15_000
