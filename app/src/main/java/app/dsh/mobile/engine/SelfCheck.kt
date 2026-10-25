@@ -148,10 +148,10 @@ object SelfCheck {
         // 架构：与设备 ABI 比对（跨架构会让 execve 直接被 linker 拒绝）
         runCatching {
             val actual = ReadElfMachine(node)
-            val expected = when {
-                Build.SUPPORTED_ABIS.contains("arm64-v8a") -> 183
-                Build.SUPPORTED_ABIS.contains("x86_64") -> 62
-                Build.SUPPORTED_ABIS.contains("armeabi-v7a") -> 40
+            val expected = when (Build.SUPPORTED_ABIS.firstOrNull()) {
+                "arm64-v8a" -> 183
+                "x86_64" -> 62
+                "armeabi-v7a" -> 40
                 else -> 0
             }
             out += if (actual > 0 && expected > 0 && actual != expected) {

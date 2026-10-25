@@ -880,6 +880,7 @@ class MainActivity : Activity() {
     /** 当前阶段主文案（遮罩大字） */
     private fun stageStatusRes(stage: BootTrace.Stage): Int = when (stage) {
         BootTrace.Stage.IDLE, BootTrace.Stage.PREPARING -> R.string.splash_preparing
+        BootTrace.Stage.DOWNLOADING -> R.string.splash_downloading
         BootTrace.Stage.EXTRACTING -> R.string.splash_extracting
         BootTrace.Stage.STARTING -> R.string.splash_starting
         BootTrace.Stage.LOADING -> R.string.splash_loading
@@ -901,7 +902,9 @@ class MainActivity : Activity() {
 
         val elapsed = snap.elapsedMs()
         val lastKey = snap.steps.lastOrNull()?.key
-        val label = if (snap.stage == BootTrace.Stage.EXTRACTING) {
+        val label = if (snap.stage == BootTrace.Stage.DOWNLOADING) {
+            getString(R.string.boot_step_download)
+        } else if (snap.stage == BootTrace.Stage.EXTRACTING) {
             getString(R.string.boot_step_runtime)
         } else if (lastKey != null) {
             stageLabel(lastKey)
@@ -913,14 +916,14 @@ class MainActivity : Activity() {
         // 明细行
         val detail = StringBuilder()
         val ins = snap.install
-        if (snap.stage == BootTrace.Stage.EXTRACTING) {
+        if (snap.stage == BootTrace.Stage.EXTRACTING || snap.stage == BootTrace.Stage.DOWNLOADING) {
             when {
                 // 解压文件：文件数最直观（字节数在大量小文件上几乎不动）
-                ins.totalFiles > 0 -> {
+                snap.stage == BootTrace.Stage.EXTRACTING && ins.totalFiles > 0 -> {
                     detail.append(getString(R.string.splash_files, ins.doneFiles, ins.totalFiles))
                     if (ins.doneBytes > 0) detail.append(" · ").append(fmtSize(ins.doneBytes))
                 }
-                // 拷贝 zip（assets → cache）：没有文件概念，只有字节
+                // 下载/拷贝 zip：没有文件概念，只有字节
                 ins.totalBytes > 0 -> {
                     detail.append(fmtSize(ins.doneBytes))
                         .append(" / ")
@@ -945,7 +948,11 @@ class MainActivity : Activity() {
 
         // 进度条：解压阶段用确定性进度，其余转不确定
         splashProgress?.let { p ->
-            val frac = if (snap.stage == BootTrace.Stage.EXTRACTING) ins.fraction else null
+            val frac = if (snap.stage == BootTrace.Stage.EXTRACTING || snap.stage == BootTrace.Stage.DOWNLOADING) {
+                ins.fraction
+            } else {
+                null
+            }
             if (frac == null) {
                 if (!p.isIndeterminate) {
                     p.isIndeterminate = true

@@ -508,6 +508,7 @@ You can still continue without updating, but the interface will not display.</st
     <string name="splash_loading">Loading the interface…</string>
     <string name="splash_hint">Please wait a few seconds…</string>
     <string name="splash_extracting">Extracting the runtime…</string>
+    <string name="splash_downloading">Downloading the runtime…</string>
     <string name="splash_failed">Startup failed</string>
     <string name="splash_elapsed">%1$s · %2$s</string>
     <string name="splash_files">%1$,d / %2$,d files</string>
@@ -522,6 +523,7 @@ You can still continue without updating, but the interface will not display.</st
     <string name="boot_step_bridge">Start capability bridge</string>
     <string name="boot_step_owner">Check file ownership</string>
     <string name="boot_step_runtime">Extract runtime</string>
+    <string name="boot_step_download">Download runtime</string>
     <string name="boot_step_userdata">Link user data</string>
     <string name="boot_step_spawn">Launch engine process</string>
     <string name="boot_step_health">Wait for health check</string>
@@ -632,7 +634,7 @@ You can still continue without updating, but the interface will not display.</st
     <string name="about_runtime_idle">Check for runtime updates</string>
     <string name="about_runtime_checking">Checking runtime…</string>
     <string name="about_runtime_available">Runtime %1$s available — tap to install</string>
-    <string name="about_runtime_latest">Runtime is up to date</string>
+    <string name="about_runtime_latest">Runtime %1$s is up to date</string>
     <string name="about_runtime_failed">Runtime check failed: %1$s</string>
     <string name="about_runtime_installing">Installing runtime… %1$d%%</string>
     <string name="about_runtime_installed">Runtime installed — restarting the engine</string>
