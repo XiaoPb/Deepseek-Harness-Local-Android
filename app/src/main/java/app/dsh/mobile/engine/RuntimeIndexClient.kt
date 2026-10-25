@@ -1,6 +1,8 @@
 package app.dsh.mobile.engine
 
 import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
 import android.util.Base64
 import android.util.Log
 import app.dsh.mobile.R
@@ -8,6 +10,7 @@ import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 import java.security.KeyFactory
+import java.security.PublicKey
 import java.security.Signature
 import java.security.spec.X509EncodedKeySpec
 
@@ -135,29 +138,63 @@ object RuntimeIndexClient {
     }
 
     /**
-     * 签名校验：默认用 APK 正式签名证书的 RSA-4096 公钥（SHA256withRSA）；
-     * 同时兼容旧的 EC P-256 公钥（SHA256withECDSA），便于轮换。
+     * 签名校验。
+     *
+     * 信任锚按优先级：
+     *  1. 构建期从正式 keystore 导出的 `res/raw/runtime_index_pub.pem`（debug/preview
+     *     也能验证 release 签名的索引；Fork 构建自动换成自己的 key）；
+     *  2. APK 自身的签名证书公钥（release 包无需内置 PEM，轮换 key 时自动跟随）。
+     *
+     * 两者任一验证通过即可；都不可用时拒绝索引（不降级）。
      */
-    private fun verifySignature(ctx: Context, data: ByteArray, signature: ByteArray): Boolean = runCatching {
-        val pem = ctx.resources.openRawResource(R.raw.runtime_index_pub)
-            .bufferedReader().use { it.readText() }
+    private fun verifySignature(ctx: Context, data: ByteArray, signature: ByteArray): Boolean {
+        val sigBytes = runCatching {
+            Base64.decode(String(signature, Charsets.US_ASCII).trim(), Base64.DEFAULT)
+        }.getOrNull() ?: return false
+
+        val keys = mutableListOf<PublicKey>()
+        runCatching {
+            val pem = ctx.resources.openRawResource(R.raw.runtime_index_pub)
+                .bufferedReader().use { it.readText() }
+            if (pem.isNotBlank()) publicKeyFromPem(pem)?.let { keys.add(it) }
+        }.onFailure { Log.i(TAG, "bundled index pubkey unavailable: ${it.message}") }
+        keys.addAll(appSigningKeys(ctx))
+
+        if (keys.isEmpty()) {
+            Log.w(TAG, "no index verification key (bundled PEM missing and signer unreadable)")
+            return false
+        }
+        return keys.any { key ->
+            runCatching {
+                val algorithm = if (key.algorithm == "RSA") "SHA256withRSA" else "SHA256withECDSA"
+                val sig = Signature.getInstance(algorithm)
+                sig.initVerify(key)
+                sig.update(data)
+                sig.verify(sigBytes)
+            }.getOrDefault(false)
+        }
+    }
+
+    private fun publicKeyFromPem(pem: String): PublicKey? = runCatching {
         val der = Base64.decode(
             pem.replace(Regex("-----[^-]+-----"), "").replace(Regex("\\s"), ""),
             Base64.DEFAULT,
         )
         val spec = X509EncodedKeySpec(der)
-        val key = runCatching { KeyFactory.getInstance("EC").generatePublic(spec) }
+        runCatching { KeyFactory.getInstance("EC").generatePublic(spec) }
             .getOrElse { KeyFactory.getInstance("RSA").generatePublic(spec) }
-        val algorithm = when (key.algorithm) {
-            "RSA" -> "SHA256withRSA"
-            else -> "SHA256withECDSA"
+    }.getOrNull()
+
+    /** APK 自身的签名证书公钥（API 28+ 用 signingInfo，26/27 回退 GET_SIGNATURES）。 */
+    @Suppress("DEPRECATION")
+    private fun appSigningKeys(ctx: Context): List<PublicKey> = runCatching {
+        val pm = ctx.packageManager
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            val info = pm.getPackageInfo(ctx.packageName, PackageManager.GET_SIGNING_CERTIFICATES)
+            info.signingInfo?.apkContentsSigners?.mapNotNull { it.publicKey } ?: emptyList()
+        } else {
+            val info = pm.getPackageInfo(ctx.packageName, PackageManager.GET_SIGNATURES)
+            info.signatures?.mapNotNull { it.publicKey } ?: emptyList()
         }
-        val sig = Signature.getInstance(algorithm)
-        sig.initVerify(key)
-        sig.update(data)
-        sig.verify(Base64.decode(String(signature, Charsets.US_ASCII).trim(), Base64.DEFAULT))
-    }.getOrElse {
-        Log.w(TAG, "signature verification error: ${it.message}")
-        false
-    }
+    }.getOrDefault(emptyList())
 }

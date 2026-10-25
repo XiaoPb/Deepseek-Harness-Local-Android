@@ -104,23 +104,20 @@ CI 每次 tag 构建都会用 `apksigner verify --print-certs` 比对实际签�
 ### 2.4 运行时索引签名（复用 APK 正式签名密钥）
 
 `publish-release` 为 `runtime-index.json` 生成 detached 签名（默认 `SHA256withRSA`），
-App 用内置公钥（`app/src/main/res/raw/runtime_index_pub.pem`）验签。
+App 用构建期生成/自身证书的公钥验签。
 
 **不新增 secret**：CI 在发布 job 里从 `RELEASE_KEYSTORE_BASE64` 解码 PKCS12，用
-`RELEASE_STORE_PASSWORD` + `RELEASE_KEY_ALIAS` 取出私钥，签名后立即删除临时文件。
-因此索引签名与 APK 签名使用同一把 key：
+`RELEASE_STORE_PASSWORD` 取出私钥，签名后立即删除临时文件。索引签名与 APK 签名使用同一把 key：
 
 - 优点：Fork 只需配置已有的 4 个 `RELEASE_*` secret；不会出现“APK 能装、索引验不过”的错配。
-- 代价：这把私钥的用途增加了一项（签索引）；换 key 时索引公钥也要随新 APK 一起换。
-  App 侧兼容 EC P-256 与 RSA 两种公钥，便于轮换。
+- 代价：这把私钥的用途增加了一项（签索引）；换 key 时索引公钥随新 APK 自动更新。
 
-`app/src/main/res/raw/runtime_index_pub.pem` 由正式 keystore 的证书导出（公钥，非私钥）：
+**公钥不入库**：`generateIndexPubKey` 任务在构建期用 `keytool -exportcert` 从正式
+keystore 导出公钥，写到 `build/generated/indexRes/raw/runtime_index_pub.pem`。
+没有签名材料时生成空文件，App 回退到「自身签名证书公钥」验签（release 包总能自验证）；
+本地 debug 无 keystore 时无法验证 release 签名的索引，云更新入口会明确失败，不影响启动。
 
-```bash
-openssl pkcs12 -in keystore/dsh-release.keystore -nokeys -clcerts \
-  -passin pass:"$STORE_PASSWORD" -out /tmp/cert.pem
-openssl x509 -in /tmp/cert.pem -pubkey -noout > app/src/main/res/raw/runtime_index_pub.pem
-```
+> 如果确实要手工指定公钥（例如 CI 使用 HSM），传 `-PindexPubKey=<公钥 PEM 路径>`。
 
 `RUNTIME_INDEX_KEY_ID`（Repository Variable，可选）默认 `release-keystore`。
 

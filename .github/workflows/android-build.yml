@@ -560,8 +560,14 @@ jobs:
             echo "::error::缺少 RELEASE_KEYSTORE_BASE64（索引复用 APK 正式签名密钥）"; exit 1; }
           KS=/tmp/dsh-release.keystore
           KEY=/tmp/runtime-index-signing-key.pem
+          PUB=/tmp/runtime-index-pub.pem
+          CERT=/tmp/runtime-index-cert.pem
           printf '%s' "$RELEASE_KEYSTORE_BASE64" | base64 -d > "$KS"
           chmod 600 "$KS"
+          # 导出公钥供本步自验签（与 App 构建期生成的是同一把 key）。
+          openssl pkcs12 -in "$KS" -nokeys -clcerts \
+            -passin pass:"$RELEASE_STORE_PASSWORD" -out "$CERT" 2>/dev/null
+          openssl x509 -in "$CERT" -pubkey -noout > "$PUB"
           # 从 PKCS12 中取出正式签名私钥（RSA-4096），只用于本次索引签名，结束即删。
           # 该 keystore 只有一个私钥 alias（dsh-release）；-name 在非 -export 模式下会被忽略。
           if ! openssl pkcs12 -in "$KS" -nocerts -nodes \
@@ -584,9 +590,9 @@ jobs:
           python3 scripts/sign-runtime-index.py --key "$KEY" \
             --in release/runtime-index.json --out release/runtime-index.json.sig
           python3 scripts/sign-runtime-index.py --verify \
-            --pubkey app/src/main/res/raw/runtime_index_pub.pem \
+            --pubkey "$PUB" \
             --in release/runtime-index.json --sig release/runtime-index.json.sig
-          rm -f "$KEY" "$KS"
+          rm -f "$KEY" "$KS" "$PUB" "$CERT"
           ls -lh release/
 
       - name: 生成发布说明
