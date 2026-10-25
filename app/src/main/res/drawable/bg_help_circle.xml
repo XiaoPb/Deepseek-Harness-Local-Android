@@ -4,8 +4,8 @@
      在 32dp 小尺寸上看起来就是个方块（主人反馈"边缘还是不圆润"）。 -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="oval">
-    <solid android:color="#FF1B222C" />
+    <solid android:color="@color/surface_high" />
     <stroke
         android:width="1dp"
-        android:color="#FF2A3441" />
+        android:color="@color/divider" />
 </shape>

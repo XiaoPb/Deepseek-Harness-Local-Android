@@ -31,7 +31,7 @@ import kotlinx.coroutines.withContext
  * 列表为程序化构建（清单约 18 项，无需引入 RecyclerView）；
  * 下载在协程 IO 线程执行，进度经 runOnUiThread 回刷行内 ProgressBar。
  */
-class ExtensionStoreActivity : Activity() {
+class ExtensionStoreActivity : ThemedActivity() {
 
     private val manager by lazy { (application as DshApp).extensionManager }
     private val uiScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -191,13 +191,13 @@ class ExtensionStoreActivity : Activity() {
                     addView(TextView(this@ExtensionStoreActivity).apply {
                         text = ext.name
                         textSize = 16f
-                        setTextColor(0xFFFFFFFF.toInt())
+                        setTextColor(getColor(R.color.text_primary))
                     })
                     if (ext.desc.isNotEmpty()) addView(TextView(this@ExtensionStoreActivity).apply {
                         // 介绍文案（catalog desc）：上限两行，超出省略号，不再被按钮挤成竖条
                         text = ext.desc
                         textSize = 12f
-                        setTextColor(0xFF9AA5B4.toInt())
+                        setTextColor(getColor(R.color.text_secondary))
                         maxLines = 2
                         ellipsize = android.text.TextUtils.TruncateAt.END
                         setPadding(0, dp(3), 0, 0)

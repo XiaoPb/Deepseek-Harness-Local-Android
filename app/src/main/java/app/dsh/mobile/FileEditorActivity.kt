@@ -34,7 +34,7 @@ import java.nio.file.attribute.PosixFilePermission
  * 半截配置（引擎读到坏 YAML 会触发 ProfileGuardian 安全模式，用户看到的是
  * 「我的插件全没了」）。rename 在同一文件系统内是原子的，要么全新要么全旧。
  */
-class FileEditorActivity : Activity() {
+class FileEditorActivity : ThemedActivity() {
 
     companion object {
         /** 目标文件绝对路径（由桥传入）。 */

@@ -20,7 +20,7 @@ import app.dsh.mobile.engine.AgentContextSeed
  *
  * 页面底部展示「环境说明由 App 管理」的说明，避免用户以为改不了。
  */
-class UserPromptActivity : Activity() {
+class UserPromptActivity : ThemedActivity() {
 
     override fun attachBaseContext(newBase: android.content.Context) {
         super.attachBaseContext(LocaleHelper.wrap(newBase))

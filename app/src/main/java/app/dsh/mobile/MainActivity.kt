@@ -43,7 +43,7 @@ import kotlinx.coroutines.launch
  * 设置入口：右上角 ⋯ 跳转独立设置页（SettingsActivity，MIUI 风格分组卡片），
  * 不再使用悬浮弹窗菜单。
  */
-class MainActivity : Activity() {
+class MainActivity : ThemedActivity() {
 
     private lateinit var webView: WebView
     private lateinit var statusBar: TextView
@@ -95,6 +95,8 @@ class MainActivity : Activity() {
     private var splashStepsScroll: android.view.View? = null
     /** 阶段列表是否展开 */
     private var splashStepsExpanded = false
+    /** 当前 Activity 已应用的主题；从设置页返回时检测变化并 recreate。 */
+    private var appliedTheme: ThemeMode? = null
     /** 秒表：逐秒刷新已用时间（v1.4.8） */
     private var splashTicker: Runnable? = null
     /** 遮罩出现时间：用于保证最短展示时长（避免一闪而过） */
@@ -112,6 +114,7 @@ class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        appliedTheme = ThemePref.get(this)
         // 用户主动打开了 App → 清除「显式退出」标记，恢复正常保活行为。
         // 与 EngineService.exitCompletely() 的置位成对：退出后不复活，重开即恢复。
         runCatching { DshApp.setUserExitedExplicitly(this, false) }
@@ -217,6 +220,12 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        val currentTheme = ThemePref.get(this)
+        if (appliedTheme != null && appliedTheme != currentTheme) {
+            appliedTheme = currentTheme
+            recreate()
+            return
+        }
         // 🔴 v1.2.91：恢复 WebView 的 JS 定时器。
         // 主人实测「回到后台时通过语音发送消息，消息发出去了但模型不响应，
         // 切回前台才开始响应」—— 根因就是这里缺 webView.onResume()：
@@ -756,7 +765,7 @@ class MainActivity : Activity() {
         // 秒表：每秒刷新"已用 N.Ns · 当前阶段"
         startSplashTicker()
         // WebView 底色与主题一致：遮罩淡出时不会闪出白底
-        runCatching { webView.setBackgroundColor(0xFF101418.toInt()) }
+        runCatching { webView.setBackgroundColor(getColor(R.color.bg)) }
         val logo = splashLogo ?: return
         logo.alpha = 0f
         logo.scaleX = 0.82f

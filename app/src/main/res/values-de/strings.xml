@@ -45,6 +45,11 @@
     <string name="ob_title">Willkommen bei DSH Mobile</string>
     <string name="ob_subtitle">Beim ersten Start wird alles nach Ihren Wünschen eingerichtet — diese Seite erscheint danach nicht mehr.</string>
     <string name="ob_orientation_label">Standard-Bildschirmausrichtung</string>
+    <string name="ob_theme_label">Darstellung</string>
+    <string name="ob_theme_desc">Wähle das Theme der nativen Oberfläche. Die Chat-Oberfläche folgt den dsh-Einstellungen.</string>
+    <string name="theme_dark">Dunkel</string>
+    <string name="theme_light">Hell</string>
+    <string name="theme_system">System folgen</string>
     <string name="ob_orientation_desc">Hochformat (Handy) eignet sich zum einhändigen Stöbern; Querformat wechselt zum Desktop-Layout; Automatisch folgt der Gerätedrehung (Desktop-Layout nur bei physischem Querformat)</string>
     <string name="ob_orient_portrait">Hochformat (Handy)</string>
     <string name="ob_orient_landscape">Querformat (Desktop-Layout)</string>
@@ -92,6 +97,8 @@
     <string name="setting_applied_now">sofort wirksam</string>
     <string name="setting_scale">Seitenzoom</string>
     <string name="setting_scale_sub">Skalierung der Webseitenanzeige anpassen (Browser-Zoom)</string>
+    <string name="setting_theme">Darstellung</string>
+    <string name="setting_theme_sub">Dunkel, hell oder dem System folgen</string>
 
     <string name="setting_priv_mode">Berechtigungsmodus</string>
     <string name="setting_priv_mode_sub">Bestimmt, wie viel Systembereich die KI erreichen kann. Beim Wechsel startet die Engine neu</string>

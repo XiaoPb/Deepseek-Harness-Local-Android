@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 深色主题：保持 v1.4.19 的视觉 -->
+    <color name="bg">#FF101418</color>
+    <color name="surface">#FF161D29</color>
+    <color name="surface_alt">#FF1B2330</color>
+    <color name="surface_high">#FF1D232B</color>
+    <color name="toolbar">#FF101418</color>
+    <color name="dialog_bg">#FF1D232B</color>
+    <color name="text_primary">#FFF2F5F9</color>
+    <color name="text_secondary">#FF9CA3AF</color>
+    <color name="text_muted">#FF6B7684</color>
+    <color name="accent">#FF7DD3FC</color>
+    <color name="accent_soft">#1F7DD3FC</color>
+    <color name="accent_alt">#FFA78BFA</color>
+    <color name="on_accent">#FF0B1116</color>
+    <color name="divider">#22FFFFFF</color>
+    <color name="stroke">#26FFFFFF</color>
+    <color name="overlay">#B31A2028</color>
+    <color name="danger">#FFFF8A80</color>
+    <color name="success">#FF6EE7B7</color>
+    <color name="warning">#FFF2B36B</color>
+    <color name="icon_color">#FFFFFFFF</color>
+    <color name="splash_start">#FF0B1220</color>
+    <color name="splash_end">#FF0A0F17</color>
+    <color name="splash_card">#F2161D29</color>
+    <color name="splash_logo_start">#FF1D4E7A</color>
+    <color name="splash_logo_end">#FF0E2740</color>
+    <color name="splash_pill">#1F7DD3FC</color>
+</resources>

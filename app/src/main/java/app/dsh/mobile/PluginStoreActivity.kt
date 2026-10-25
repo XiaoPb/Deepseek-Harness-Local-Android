@@ -25,7 +25,7 @@ import app.dsh.mobile.engine.PluginCenter.PluginInfo
  *    按钮改小尺寸描边胶囊（旧版全宽实心大按钮，主人反馈「太 AI 了」）。
  *  - 进入页面自动加载全部生态，搜索框回车/点按钮过滤。
  */
-class PluginStoreActivity : Activity() {
+class PluginStoreActivity : ThemedActivity() {
 
     /** v1.2.120：与其余页面一致，按应用内语言偏好包装 Context（此前遗漏） */
     override fun attachBaseContext(newBase: android.content.Context) {
@@ -175,7 +175,7 @@ class PluginStoreActivity : Activity() {
         }
         titleRow.addView(TextView(this).apply {
             text = p.pkg
-            setTextColor(0xFFFFFFFF.toInt())
+            setTextColor(getColor(R.color.text_primary))
             textSize = 15f
             setTypeface(typeface, Typeface.BOLD)
         })

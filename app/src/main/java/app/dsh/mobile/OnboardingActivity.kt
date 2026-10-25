@@ -24,11 +24,12 @@ import app.dsh.mobile.engine.Privilege
  * 进入 Root 分支前）会先对 dsh-home 做 tar 备份可回滚。能力检测仅 stat/probe，
  * 不做任何危险动作。
  */
-class OnboardingActivity : Activity() {
+class OnboardingActivity : ThemedActivity() {
 
     private var selectedOrientation: OrientationMode = OrientationMode.PORTRAIT
     private var selectedPriv = PrivMode.NORMAL
     private var selectedLang = LocaleHelper.DEFAULT
+    private var selectedTheme = ThemeMode.DARK
 
     /** Shizuku 授权结果监听（requestPermission 异步回调） */
     private val shizukuPermListener =
@@ -53,6 +54,7 @@ class OnboardingActivity : Activity() {
         selectedOrientation = OrientationPrefs.defaultFor(this)
         // 默认选中：普通 + 语言卡片高亮（默认英语）
         selectedLang = LocaleHelper.get(this)
+        selectedTheme = ThemePref.get(this)
         updateSelectionUi()
 
         // 语言卡片组（v1.2.120：en/de/zh 三选一）：点击保存偏好并 recreate，立即切换引导页语言
@@ -84,6 +86,22 @@ class OnboardingActivity : Activity() {
             updateSelectionUi()
         }
 
+        // 外观：深色 / 浅色 / 跟随系统。立即 recreate，让引导页自身预览。
+        val themeCards = mapOf(
+            findViewById<LinearLayout>(R.id.cardThemeDark) to ThemeMode.DARK,
+            findViewById<LinearLayout>(R.id.cardThemeLight) to ThemeMode.LIGHT,
+            findViewById<LinearLayout>(R.id.cardThemeSystem) to ThemeMode.SYSTEM,
+        )
+        for ((card, mode) in themeCards) {
+            card.setOnClickListener {
+                if (selectedTheme != mode) {
+                    ThemePref.set(this, mode)
+                    selectedTheme = mode
+                    recreate()
+                }
+            }
+        }
+
         val privGroup = findViewById<RadioGroup>(R.id.privGroup)
         privGroup.setOnCheckedChangeListener { _, checkedId ->
             selectedPriv = when (checkedId) {
@@ -102,7 +120,7 @@ class OnboardingActivity : Activity() {
         // 先显示「检测中」，结果回填 UI。
         findViewById<TextView>(R.id.capRoot).apply {
             text = getString(R.string.ob_cap_root_checking)
-            setTextColor(0xFF8A94A3.toInt())
+            setTextColor(getColor(R.color.text_secondary))
         }
         Thread({
             val hasRoot = Privilege.probe(this).hasRoot
@@ -111,7 +129,7 @@ class OnboardingActivity : Activity() {
                     text = getString(
                         if (hasRoot) R.string.ob_cap_root_present else R.string.ob_cap_root_absent
                     )
-                    setTextColor(if (hasRoot) 0xFF6EE7B7.toInt() else 0xFFFFB74D.toInt())
+                    setTextColor(if (hasRoot) getColor(R.color.success) else getColor(R.color.warning))
                 }
             }
         }, "probe-root").apply { isDaemon = true; start() }
@@ -160,13 +178,13 @@ class OnboardingActivity : Activity() {
         when {
             Privilege.shizukuUsable() -> {
                 v.text = getString(R.string.ob_cap_shizuku_present)
-                v.setTextColor(0xFF6EE7B7.toInt())
+                v.setTextColor(getColor(R.color.success))
             }
             Privilege.shizukuServerRunning() -> {
                 // v1.2.158 隐私修复：不再在此自动请求（拒绝后回调会回到这里 → 死循环）。
                 // 引导页的显式入口是"选中 Shizuku 单选项"→ maybeRequestShizuku()。
                 v.text = getString(R.string.ob_cap_shizuku_request)
-                v.setTextColor(0xFFFFB74D.toInt())
+                v.setTextColor(getColor(R.color.warning))
                 v.isClickable = true
                 v.setOnClickListener {
                     Privilege.requestShizukuPermission(SHIZUKU_REQ, this@OnboardingActivity, explicit = true)
@@ -174,7 +192,7 @@ class OnboardingActivity : Activity() {
             }
             else -> {
                 v.text = getString(R.string.ob_cap_shizuku_absent)
-                v.setTextColor(0xFFFFB74D.toInt())
+                v.setTextColor(getColor(R.color.warning))
             }
         }
     }
@@ -197,8 +215,8 @@ class OnboardingActivity : Activity() {
      *    默认英语时用户看不出当前选的是哪个）。
      */
     private fun updateSelectionUi() {
-        val highlight = 0xFF7DD3FC.toInt()
-        val normal = 0xFF9CA3AF.toInt()
+        val highlight = getColor(R.color.accent)
+        val normal = getColor(R.color.text_secondary)
 
         // —— 方向：竖屏/横屏/自动 ——
         val orientCards = listOf(
@@ -232,6 +250,19 @@ class OnboardingActivity : Activity() {
             val card = findViewById<LinearLayout>(cardId)
             val txt = card.getChildAt(0) as TextView
             val active = selectedLang == code
+            txt.setTextColor(if (active) highlight else normal)
+            card.alpha = if (active) 1f else 0.6f
+        }
+
+        // —— 外观：深色 / 浅色 / 跟随系统 ——
+        for ((cardId, txtId, mode) in listOf(
+                Triple(R.id.cardThemeDark, R.id.txtThemeDark, ThemeMode.DARK),
+                Triple(R.id.cardThemeLight, R.id.txtThemeLight, ThemeMode.LIGHT),
+                Triple(R.id.cardThemeSystem, R.id.txtThemeSystem, ThemeMode.SYSTEM),
+            )) {
+            val card = findViewById<LinearLayout>(cardId)
+            val txt = findViewById<TextView>(txtId)
+            val active = selectedTheme == mode
             txt.setTextColor(if (active) highlight else normal)
             card.alpha = if (active) 1f else 0.6f
         }

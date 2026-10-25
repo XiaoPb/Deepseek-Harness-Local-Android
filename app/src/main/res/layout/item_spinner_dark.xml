@@ -10,5 +10,5 @@
     android:gravity="center_vertical"
     android:paddingHorizontal="16dp"
     android:paddingVertical="10dp"
-    android:textColor="#FFE8ECF2"
+    android:textColor="@color/text_primary"
     android:textSize="14sp" />

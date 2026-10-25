@@ -26,7 +26,7 @@ import app.dsh.mobile.engine.EdgeTts
  * 微软 Edge 神经网络音色（App 直连，无中转）/ 系统引擎；**音色从下拉里选**，
  * 不让用户手填（主人："有的时候用户都不知道可以填什么"）。
  */
-class VoiceServiceActivity : Activity() {
+class VoiceServiceActivity : ThemedActivity() {
 
     // 识别
     private lateinit var asrEngineSpinner: Spinner
@@ -179,7 +179,7 @@ class VoiceServiceActivity : Activity() {
                 val v = super.getView(position, convertView, parent)
                 (v as? TextView)?.apply {
                     // 同样不设 setBackgroundColor（Spinner 收起态的背景由外层 bg_voice_input 提供）
-                    setTextColor(0xFFE8ECF2.toInt())
+                    setTextColor(getColor(R.color.text_primary))
                 }
                 return v
             }
@@ -190,7 +190,7 @@ class VoiceServiceActivity : Activity() {
                     // ⚠️ 不要用 setBackgroundColor：那会**冲掉 drawable 的圆角**，
                     // 条目变成直角方块（主人反馈"边缘还是不圆润"）。
                     // 背景交给 item_spinner_dark 的 drawable（含圆角 + 水波纹），这里只设文字色。
-                    setTextColor(0xFFE8ECF2.toInt())
+                    setTextColor(getColor(R.color.text_primary))
                     setPadding(dp(16), dp(12), dp(16), dp(12))
                 }
                 return v
