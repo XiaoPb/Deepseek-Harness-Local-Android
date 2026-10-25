@@ -4,7 +4,7 @@ name: android-build
 # v1.2.120 · 2026-10-13 — 全量触发 + 结果监视
 #
 # 双架构矩阵（arm64-v8a 真机 / x86_64 模拟器）：
-#   build-hardssh-plugin —— 从 GitHub 固定 ref 拉取 @tiphareth/dsh-hardssh 源码并构建
+#   build-hardssh-plugin —— 从 GitHub 固定 ref 拉取 @xiaopb/dsh-hardssh 源码并构建
 #   collect-runtime —— 从 Termux 仓库收集对应架构 node 运行时 + 注入内置 SSH 插件 → runtime.zip
 #   build-apk       —— 注入 runtime.zip 进 assets → gradle -Pabi=... 出 APK
 #   release         —— 构建成功后，双架构 APK 自动发到本仓库 Releases（v1.2.120）
@@ -29,14 +29,14 @@ on:
 env:
   # 内置 SSH 远程工作区插件：源码不在本仓库，构建时从 GitHub 按固定提交拉取。
   # 升级插件 = 改 HARDSSH_REF（commit SHA 最稳；也接受 tag/分支），其余步骤不用动。
-  # 2026-10-25：v0.2.10 —— 本地目录弹窗按 DSH 设计语言重绘（路径输入组 / 快捷入口
-  # 胶囊 / 面包屑 / 线性图标 / 固定底栏），并新增「新建文件夹」（内核
-  # createDirectory 接缝，成功后重列目录并高亮）。仍在 0.2.9 的 Android browse
-  # 本地选择 + 私钥导入/生成之上（入口加载修复 26be03b：ssh2 的 CJS utils 改为
-  # 默认导入）。构建末尾会用原生 Node import lib/index.js 作为闸门。
-  # 上游合入后可改回 tiphareth0/dsh-hardssh。
+  # 2026-10-25：v0.2.13（fork 包名 @xiaopb/dsh-hardssh）—— 修复空 commandPolicy
+  # 持久化导致 ssh_list 丢失；v0.2.12 起已完成 DSH 0.2.1-rc.2/rc.3 兼容矩阵、
+  # 显式 keyPath、SSH 工作区新建文件夹等改动。构建末尾仍会用原生 Node import
+  # lib/index.js 作为闸门。
+  # ⚠️ 包名在 v0.2.11 起从 @tiphareth/dsh-hardssh 改为 @xiaopb/dsh-hardssh，
+  #    运行时落点、profile 链接、App 常量与打包脚本必须一起改。
   HARDSSH_REPO: XiaoPb/dsh-hardssh
-  HARDSSH_REF: c7e2bd1e8ae8814d9041d2081fc794fb54aee992
+  HARDSSH_REF: 09a1d1fb58b2fe63e19b7e9fc4300bc79bcc5d20
 
 permissions:
   contents: read   # release 段仍注释；启用时在该 job 内单独提权
@@ -49,7 +49,7 @@ concurrency:
 
 jobs:
   # ---------------------------------------------------------------------------
-  # 内置 SSH 远程工作区插件（@tiphareth/dsh-hardssh）
+  # 内置 SSH 远程工作区插件（@xiaopb/dsh-hardssh）
   #
   # 设计约束（用户要求）：插件源码不进入本仓库 —— CI 在构建时从 GitHub 拉取
   # 固定 ref，构建产物只以 runtime.zip 内文件的形式进入 APK。
@@ -81,7 +81,7 @@ jobs:
         working-directory: hardssh-src
         run: |
           pnpm install --frozen-lockfile
-          pnpm --filter @tiphareth/dsh-hardssh build
+          pnpm --filter @xiaopb/dsh-hardssh build
 
       - name: 组装 runtime 部署单元
         env:
@@ -155,10 +155,10 @@ jobs:
             echo "::error::runtime 混入宿主 Linux ripgrep"
             exit 1
           fi
-          # 内置 SSH 远程工作区插件（@tiphareth/dsh-hardssh）：宿主代码 + 浏览器
+          # 内置 SSH 远程工作区插件（@xiaopb/dsh-hardssh）：宿主代码 + 浏览器
           # bundle + 自己的 patch 层 + 两个第三方依赖都必须在包里；App 侧依赖
           # 这些固定路径启用插件，缺一个就静默失去 SSH 能力，因此在 CI 挡住。
-          SSH_PKG=runtime-check/lib/node_modules/@tiphareth/dsh-hardssh
+          SSH_PKG=runtime-check/lib/node_modules/@xiaopb/dsh-hardssh
           for f in lib/index.js lib/fs.js lib/subprocess.js lib/client.js \
                    cordis.patch.yml node_modules/ssh2/package.json node_modules/ws/package.json; do
             test -f "$SSH_PKG/$f" || { echo "::error::内置 SSH 插件缺少 $f"; exit 1; }
@@ -359,21 +359,22 @@ jobs:
   #   1) 本地：gradle assembleDebug -Pabi=arm64-v8a
   #   2) apksigner sign --ks keystore/dsh-release.keystore ... 然后 gh release create 上传
   #
-  # —— 但本 Fork（jahdaganj02ki-sketch）的策略不同：这里 fork 自身就是分发渠道，
-  #    debug 签名的自动构建产物直接进 Releases（见下方 release job）。上游仓库
-  #    仍按上述人工两步走。
+  # —— 自动发布策略：默认仅上游 Soodok 仓库自动发布；Fork 需在仓库 Variables
+  #    新建 ENABLE_CI_IN_FORK=true，debug 自动构建产物才会进本 Fork 的 Releases
+  #    （见下方 release job）。上游仓库仍按上述人工两步走。
 
   # ---- 自动发布（v1.2.120）：main 构建成功后，双架构 APK 落到 Releases ----
   # 触发条件：push / dispatch / 定时，且 build-apk 成功；PR 不发（Fork 的
   # GITHUB_TOKEN 在 PR 上下文无写权限）。
-  # ⚠️ 仅限 Fork 仓库：上游仓库的人工发布流程（release 签名 + 人工两步）不可被
+  # ⚠️ 仅上游仓库默认自动发布：上游的人工发布流程（release 签名 + 人工两步）不可被
   #    自动流程替代 —— CI 产物是 debug 签名，发到上游会让用户下到无法覆盖升级的包。
-  #    故这里用 github.repository 硬门禁，合入上游后此 job 直接跳过。
+  #    Fork 用户若想自己编译并发布，在仓库 Variables 新建 ENABLE_CI_IN_FORK=true 即可。
   # 版本：app/build.gradle.kts 的 versionName + 本次 run_number，保证每个成功
   # 的构建版本号唯一（tag = v<versionName>-<run_number>），互不覆盖。
   release:
     if: >-
-      github.repository == 'Soodok/Deepseek-Harness-Local-Android'
+      (github.repository == 'Soodok/Deepseek-Harness-Local-Android' ||
+       vars.ENABLE_CI_IN_FORK == 'true')
       && github.event_name != 'pull_request'
       && needs.build-apk.result == 'success'
     needs: [build-apk]
@@ -424,8 +425,9 @@ jobs:
   # ---------------------------------------------------------------------------
   publish-release:
     if: >-
-      startsWith(github.ref, 'refs/tags/v')
-      && github.repository == 'Soodok/Deepseek-Harness-Local-Android'
+      (github.repository == 'Soodok/Deepseek-Harness-Local-Android' ||
+       vars.ENABLE_CI_IN_FORK == 'true')
+      && startsWith(github.ref, 'refs/tags/v')
       && needs.build-apk.result == 'success'
     needs: [build-apk]
     runs-on: ubuntu-24.04
@@ -516,9 +518,10 @@ jobs:
   # ---------------------------------------------------------------------------
   publish-edge:
     if: >-
-      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+      (github.repository == 'Soodok/Deepseek-Harness-Local-Android' ||
+       vars.ENABLE_CI_IN_FORK == 'true')
+      && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
       && github.ref == 'refs/heads/main'
-      && github.repository == 'Soodok/Deepseek-Harness-Local-Android'
       && needs.build-apk.result == 'success'
     needs: [build-apk]
     runs-on: ubuntu-24.04

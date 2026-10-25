@@ -2,10 +2,10 @@
 # pack-hardssh-plugin.sh —— 把上游源码构建产物打包成 runtime.zip 可部署单元。
 #
 # 用法: ./scripts/pack-hardssh-plugin.sh <插件构建目录> <输出目录>
-#   <插件构建目录>  上游仓库的 packages/dsh-hardssh（已 pnpm build，含 lib/）
+#   <插件构建目录>  XiaoPb/dsh-hardssh 的 packages/dsh-hardssh（已 pnpm build，含 lib/）
 #   <输出目录>      产出目录（会整体重建）
 #
-# 产出（直接对应 runtime 的 lib/node_modules/@tiphareth/dsh-hardssh）：
+# 产出（直接对应 runtime 的 lib/node_modules/@xiaopb/dsh-hardssh）：
 #   package.json / cordis.patch.yml / LICENSE / lib/*.js / node_modules/{ssh2,ws,...}
 #
 # 为什么 node_modules 要随包带走：dsh 的 profile 只解析「用户安装」的依赖；
@@ -31,8 +31,8 @@ PKG_VERSION="$(node -e 'const fs=require("fs");process.stdout.write(JSON.parse(f
 SSH2_RANGE="$(node -e 'const fs=require("fs");process.stdout.write(JSON.parse(fs.readFileSync(process.argv[1],"utf8")).dependencies?.ssh2 ?? "")' "$SRC/package.json")"
 WS_RANGE="$(node -e 'const fs=require("fs");process.stdout.write(JSON.parse(fs.readFileSync(process.argv[1],"utf8")).dependencies?.ws ?? "")' "$SRC/package.json")"
 
-if [ "$PKG_NAME" != "@tiphareth/dsh-hardssh" ]; then
-  echo "错误：构建目录不是 @tiphareth/dsh-hardssh（实际 name=$PKG_NAME）" >&2
+if [ "$PKG_NAME" != "@xiaopb/dsh-hardssh" ]; then
+  echo "错误：构建目录不是 @xiaopb/dsh-hardssh（实际 name=$PKG_NAME）" >&2
   exit 1
 fi
 if [ -z "$SSH2_RANGE" ] || [ -z "$WS_RANGE" ]; then
@@ -40,7 +40,7 @@ if [ -z "$SSH2_RANGE" ] || [ -z "$WS_RANGE" ]; then
   exit 1
 fi
 for f in lib/index.js lib/fs.js lib/subprocess.js lib/client.js cordis.patch.yml; do
-  test -f "$SRC/$f" || { echo "错误：构建产物缺少 $f（先执行 pnpm --filter @tiphareth/dsh-hardssh build）" >&2; exit 1; }
+  test -f "$SRC/$f" || { echo "错误：构建产物缺少 $f（先执行 pnpm --filter @xiaopb/dsh-hardssh build）" >&2; exit 1; }
 done
 
 rm -rf "$OUT"
@@ -99,7 +99,7 @@ if [ ${#NODE_ADDONS[@]} -gt 0 ]; then
 fi
 
 # 供 App/CI 诊断的构建元数据（不参与运行）。
-printf '{"name":"%s","version":"%s","source":"github:tiphareth0/dsh-hardssh","ref":"%s"}\n' \
+printf '{"name":"%s","version":"%s","source":"github:XiaoPb/dsh-hardssh","ref":"%s"}\n' \
   "$PKG_NAME" "$PKG_VERSION" "${HARDSSH_PLUGIN_REF:-unknown}" > "$OUT/.runtime-bundle.json"
 
 echo "打包完成：$PKG_NAME@$PKG_VERSION -> $OUT ($(du -sh "$OUT" | cut -f1))"

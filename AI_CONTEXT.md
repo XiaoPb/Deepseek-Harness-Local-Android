@@ -21,6 +21,21 @@
   aapt2 compile + link（android-36）全资源通过；本机无 Gradle wrapper/ML Kit 缓存，
   完整 `assembleDebug` 与模拟器端到端待 CI/Android Studio 补跑。
 
+## v1.4.19 待发（CI fork 开关 + dsh-hardssh 0.2.13）
+- **Fork CI**：`release` / `publish-release` / `publish-edge` 的仓库门禁改为
+  `github.repository == 'Soodok/...' || vars.ENABLE_CI_IN_FORK == 'true'`。
+  Fork 用户只需在仓库 Variables 新建 `ENABLE_CI_IN_FORK=true` 即可自行编译/发布；
+  PR 仍不发，签名材料仍需自行配置。文档已补在 `docs/RELEASE.md`。
+- **dsh-hardssh**：`HARDSSH_REF` 从 v0.2.10 的 `c7e2bd1` 升到 0.2.13 的
+  `09a1d1fb58b2fe63e19b7e9fc4300bc79bcc5d20`（XiaoPb/dsh-hardssh）。
+- **包名变更**：v0.2.11 起 npm 包名由 `@tiphareth/dsh-hardssh` 改为
+  `@xiaopb/dsh-hardssh`（cordis.patch.yml 同步改名）。联动修改：
+  `EngineConfig.SSH_PLUGIN_PACKAGE`、profile 链接路径、runtime 注入路径、
+  CI 闭包校验、`pack-hardssh-plugin.sh` / `inject-hardssh-plugin.sh`、文档与 README。
+  `EngineConfig.LEGACY_SSH_PLUGIN_PACKAGE` 仅用于识别用户已装的旧包并让位。
+- **未验证**：本机无 pnpm 依赖缓存/CI，尚未实际跑 v0.2.13 的 `pnpm install + build`
+  与 Android 端 SSH 冒烟；以 CI 构建和真机 SSH 工作区为准。
+
 ## v1.4.18 发布（2026-10-25，PR #39 合并 + tag 发布）
 - **PR #39（@XiaoPb）已合并**（merge commit `42717f5`）：① 内置
   @tiphareth/dsh-hardssh 0.2.10（CI 从 XiaoPb/dsh-hardssh 固定 SHA 构建，注入
