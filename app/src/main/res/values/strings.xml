@@ -624,6 +624,11 @@ You can still continue without updating, but the interface will not display.</st
     <string name="pet_error_port_busy">Port 7779 is already in use</string>
     <string name="pet_error_no_permission">Overlay permission is missing</string>
     <string name="about_runtime">Runtime</string>
+    <string name="runtime_setup_title">Runtime required</string>
+    <string name="runtime_setup_message">This package does not include the Node.js runtime. Download %1$s now (Wi-Fi recommended)? Future app updates will not download it again.</string>
+    <string name="runtime_setup_download">Download and start</string>
+    <string name="runtime_setup_full">Get full package</string>
+    <string name="runtime_setup_later">Later</string>
     <string name="about_runtime_idle">Check for runtime updates</string>
     <string name="about_runtime_checking">Checking runtime…</string>
     <string name="about_runtime_available">Runtime %1$s available — tap to install</string>
