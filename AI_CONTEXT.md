@@ -1,6 +1,19 @@
 # AI_CONTEXT
 
-## v1.4.19 待发（桌宠悬浮窗预留：插件驱动、不打包插件/素材）
+## v1.4.20 合并（2026-10-25，main → dev → main）
+- 分叉点 `f613583`：main 侧 7 个提交（v1.4.19 发布线：polyfill v4、release job 降级、版本 269），
+  dev 侧 2 个提交（桌宠悬浮窗预留、CI fork 开关 + dsh-hardssh 0.2.13）。冲突仅 2 处：
+  本文件与 `.github/workflows/android-build.yml`（release job 的 if）。
+- **发布语义（本仓库，固定）**：
+  - 正式版：只接受严格 tag `v<major>.<minor>.<patch>`（如 `v1.4.20`），push tag → `publish-release`；
+    **禁止 `v*.*.*-*`**（如 `v1.4.18-380`）——CI 首个 job 校验失败，不会发版。
+  - 预览版：每日 01:30 `schedule` → `publish-preview`，双架构 debug 包发到滚动 prerelease `preview`。
+  - edge：push `main` → `publish-edge`（debug + release，滚动 `edge`）。
+- 刷包根因记录：旧 release job 每次 push/定时新建 `v<ver>-<run>` Release，该 tag 又命中
+  `on.push.tags: v*` 触发下一轮构建 → 自激刷包（v1.4.18-380/381/382/384）。现在预览固定用
+  tag `preview`，工作流不再创建任何 `v*` tag。
+- 合并后 `versionCode 269 / versionName 1.4.19`（v1.4.19 已发布），下次正式发版 `270 / 1.4.20`。
+## v1.4.20 待发（桌宠悬浮窗预留：插件驱动、不打包插件/素材）
 - **需求**：预留系统悬浮桌宠；用户自行安装 dsh 插件后开启；不改 dsh-pet 本体。
 - **生态事实修正**：真正可用的是 `dsh-pet-bridge@0.1.0`（cc-pet HookServer 协议），
   五字段是 `kind/agent_source/tool_name/tool_input/caller_pid`，**没有 bubble 文本**；
@@ -21,7 +34,7 @@
   aapt2 compile + link（android-36）全资源通过；本机无 Gradle wrapper/ML Kit 缓存，
   完整 `assembleDebug` 与模拟器端到端待 CI/Android Studio 补跑。
 
-## v1.4.19 待发（CI fork 开关 + dsh-hardssh 0.2.13）
+## v1.4.20 待发（CI fork 开关 + dsh-hardssh 0.2.13）
 - **Fork CI**：`release` / `publish-release` / `publish-edge` 的仓库门禁改为
   `github.repository == 'Soodok/...' || vars.ENABLE_CI_IN_FORK == 'true'`。
   Fork 用户只需在仓库 Variables 新建 `ENABLE_CI_IN_FORK=true` 即可自行编译/发布；
@@ -35,6 +48,43 @@
   `EngineConfig.LEGACY_SSH_PLUGIN_PACKAGE` 仅用于识别用户已装的旧包并让位。
 - **未验证**：本机无 pnpm 依赖缓存/CI，尚未实际跑 v0.2.13 的 `pnpm install + build`
   与 Android 端 SSH 冒烟；以 CI 构建和真机 SSH 工作区为准。
+## v1.4.19 已发布（2026-10-25，tag run 40169259973）
+- 4 资产上线（arm64/x86_64 × debug/release，release 226.6MB 签名校验过）。
+- WebView <85 的版本门禁为**既有功能**（AppGate MIN_WEBVIEW_CHROME=85，v1.2.100 起，
+  MainActivity.checkWebViewGate 三级取法 + market:// 升级入口 + 「仍然继续」）——
+  本版未改（曾误判缺失重复造轮子，宝宝纠正后已回滚 WebViewVersionCheck.kt）。
+- 教训：动「已有功能」前先 grep 全仓（v1.2.100 的门禁不在 issue 提及的文件里）。
+
+## v1.4.19 追加（2026-10-25，CI 刷包修复——宝宝发现「连续构建了四五个包」）
+- **根因**：PR #39 的 `release` job 是上游 fork 的 debug 自动分发渠道——
+  每次 push main 都新建 `v<ver>-<run_number>` 的 Release（发到我们仓库即
+  v1.4.18-380/381/382/384 四个重复包）。publish-edge 是单个滚动 prerelease
+  （tag=edge 反复覆盖，设计正常）。
+- **修复**：release job 条件改 `workflow_dispatch` only（commit 后推送）；
+  误发的 4 个 release + tag 已删（API）。Releases 页面现仅剩正式版 + edge。
+- **本仓库发布语义（固定）**：tag v* → publish-release（正式签名）；main
+  push → 全量构建 + edge 滚动更新；workflow_dispatch → 手动分发渠道。
+
+## v1.4.19（2026-10-25，issue #40：WebView 96 下 throwIfAborted TypeError）
+- **报告**：sanhuai-dy（AI 代提交，实机 Redmi K40 游戏增强版 / Android 12 / WebView 96.0.4664.104）。
+  v3 polyfill 覆盖 13 项但缺 `AbortSignal.prototype.throwIfAborted`（Chrome 100），
+  dynamicCordisRunner/syncInspectManifest 等客户端 runner 整链 TypeError。
+- **修复（polyfill v4，commit e4e908a）**：
+  - throwIfAborted（抛 reason，缺 reason 回退 AbortError）；
+  - **配套补 AbortSignal#reason（Chrome 98）**：96/97 的 abort(reason) 只触发事件不存
+    reason——包装 AbortController.prototype.abort（仅原型缺 reason 时启用），先挂
+    reason 再调原生（同步监听器读得到）；
+  - structuredClone 兜底 window→globalThis（Worker 里 window 不存在，v3 会中断整个
+    IIFE——隐性缺陷）；
+  - patch 脚本 +--zip 模式；本地 5 个 runtime zip 已升 v4。
+- **构建门禁**：prepareRuntime 校验 index.html v4 标记 + 三个符号，缺失现场打、
+  再缺中止（防「补丁只存在于产物」第三次重演）。
+- **测试**：scripts/probes/_test_webview_polyfill_v4.mjs——Node vm + 纯 JS fake
+  AbortController（Node 原生 any/timeout 不可配置删不掉），9 项全过（含现代环境零改动）。
+- README 兼容口径：85 是语法层门槛（??= 解析特性），API 层 14 项 polyfill 覆盖，96 实测可用。
+- **已回复 issue #40**（comment-6392630116）。versionCode 268 已随 v1.4.18 发布用掉，
+  下次发布需 bump 269/1.4.19。gitignore 白名单 +2（测试文件入 probes 白名单，照 PR #39 先例）。
+- **待发布**：等宝宝指令；发布 = bump 版本号 → tag v1.4.19 → CI 全自动。
 
 ## v1.4.18 发布（2026-10-25，PR #39 合并 + tag 发布）
 - **PR #39（@XiaoPb）已合并**（merge commit `42717f5`）：① 内置

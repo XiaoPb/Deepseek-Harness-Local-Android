@@ -50,8 +50,8 @@ android {
         // 关键决策：targetSdk 28 —— sideload 分发，豁免 Android 10+ 的 W^X 限制，
         // 允许从 filesDir 直接 execve bionic 二进制（Termux 同款策略）。
         targetSdk = 28
-        versionCode = 268
-        versionName = "1.4.18"
+        versionCode = 269
+        versionName = "1.4.19"
 
         ndk {
             abiFilters += listOf(targetAbi)
@@ -261,6 +261,47 @@ val prepareRuntime by tasks.registering {
             }
         } else {
             logger.lifecycle("runtime: PTC 补丁已存在")
+        }
+        // [polyfill 门禁] issue #40：老 WebView（96）缺 AbortSignal#throwIfAborted
+        // 会让客户端 runner 整链 TypeError。polyfill 由 collect 链注入 dist/index.html，
+        // 换源包会静默丢 —— 校验 v4 标记 + throwIfAborted，缺失现场打（幂等），再缺即中止。
+        val polyfillScript = File(projRoot, "scripts/patch-webview-polyfill.py")
+        val polyfillTarget = "lib/node_modules/@deepseek-ai/dsh-web-frontend/dist/index.html"
+        fun polyfillV4(f: File): Boolean {
+            if (!f.isFile) return false
+            return runCatching {
+                ZipFile(f).use { zf ->
+                    val e = zf.getEntry(polyfillTarget) ?: return@use false
+                    val text = zf.getInputStream(e).bufferedReader().readText()
+                    text.contains("legacy-webview polyfill v4") &&
+                        text.contains("throwIfAborted") &&
+                        text.contains("AbortSignal.any") &&
+                        text.contains("Promise.withResolvers")
+                }
+            }.getOrDefault(false)
+        }
+        if (!polyfillV4(assetsZip)) {
+            if (polyfillScript.isFile) {
+                logger.lifecycle("runtime: polyfill v4 缺失，正在应用…")
+                val rc = providers.exec {
+                    commandLine("python", polyfillScript.absolutePath, "--zip", assetsZip.absolutePath)
+                    isIgnoreExitValue = true
+                }.result.get().exitValue
+                if (rc != 0 || !polyfillV4(assetsZip)) {
+                    throw GradleException(
+                        "runtime: polyfill v4 应用失败（exit=$rc）。" +
+                            "发出去的包在 WebView 96 上 dynamicCordisRunner 全链失败 —— 中止构建。"
+                    )
+                }
+                logger.lifecycle("runtime: polyfill v4 已应用")
+            } else {
+                throw GradleException(
+                    "runtime: 找不到 " + polyfillScript.absolutePath +
+                        "，且当前 runtime 没有 v4 polyfill —— 老 WebView 上前端会崩。中止构建。"
+                )
+            }
+        } else {
+            logger.lifecycle("runtime: polyfill v4 已存在")
         }
         val sha = MessageDigest.getInstance("SHA-256").digest(assetsZip.readBytes())
             .joinToString("") { b -> "%02x".format(b) }

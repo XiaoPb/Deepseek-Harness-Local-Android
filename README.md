@@ -39,9 +39,9 @@ DSH Mobile 是 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harnes
 |---|---|---|
 | **冷启动到引擎就绪** | **< 10 秒** | 一加 15T（Android 16）真机 |
 | **多服务并行内存** | **< 400 MB** | 引擎 + 多服务并行 |
-| **兼容版本** | **Android 8.0 → 16** | 需 WebView ≥ Chrome 85 |
-| **APK 体积** | **约 144 MB** | 含完整 Node.js 运行时 + 19 项扩展的工具链闭包 |
-| **安装后占用** | **约 500 MB** | 运行时解压后 |
+| **兼容版本** | **Android 8.0 → 16** | 需 WebView ≥ Chrome 85（API 由 polyfill 补齐，实测最低 96） |
+| **APK 体积** | **约 227 MB** | 含完整 Node.js 运行时 + 19 项扩展的工具链闭包 + 内置 SSH 远程工作区插件 |
+| **安装后占用** | **约 720 MB** | 运行时解压后（约 494 MB）+ 应用本体 |
 
 对比：Termux 快照类方案首次启动通常需**数分钟**（解压 + 手动初始化）；本项目的运行时预置在 APK 内，装完即用。proot 系方案（Ubuntu 容器）APK 看着小，但首次使用要另下 500MB～2GB 的 rootfs。
 
@@ -181,7 +181,7 @@ Agent 通过只监听 `127.0.0.1:3083` 的能力桥操作手机，所有调用�
 dsh 的「一切皆插件」架构原样保留：插件热载、会话持久化全部照常工作。插件缺的语言环境由扩展中心一键补齐。Termux 路线上，`sharp` / `koffi` / `node-pty` 这类原生模块编译失败是常态。
 
 **跨版本兼容，逐台设备踩过的坑已经踩完**
-App 支持 Android 8.0 → 16；界面渲染依赖系统 WebView（**需 Chrome 85+**），构建时向前端注入 polyfill（覆盖 13 个现代 API），把 API 层门槛从原生 Chrome 126 拉回到 85；全部 so 按 **16KB 页对齐**，新内核设备直接可用。
+App 支持 Android 8.0 → 16；界面渲染依赖系统 WebView（**需 Chrome 85+**，85 是前端语法层的门槛），构建时向前端注入 polyfill（覆盖 14 个现代 API，含 AbortSignal#throwIfAborted/#reason——issue #40），把 API 层门槛从原生 Chrome 126 拉回到 85（国产 ROM 常见的 96 实测可用）；全部 so 按 **16KB 页对齐**，新内核设备直接可用。
 
 **后台不被杀，任务完成有通知**
 specialUse 前台服务 + 指数退避监督器扛住系统回收，长任务锁屏/后台持续运行，完成自动发系统通知。
@@ -232,7 +232,7 @@ gradle assembleDebug -Pabi=arm64-v8a
 
 ## ⛔ 边界（请知悉）
 
-- **WebView 需 Chrome 85+**：引擎前端用了 `??=` 等新语法，属解析期特性，polyfill 补不了。Android 8.0+ 的 WebView 是可独立升级的系统组件，升到 85+ 即可；少数无法升级的老机型为已知限制
+- **WebView 需 Chrome 85+**：引擎前端用了 `??=` 等新语法，属解析期特性，polyfill 补不了。Android 8.0+ 的 WebView 是可独立升级的系统组件，升到 85+ 即可；少数无法升级的老机型为已知限制。API 层缺口（throwIfAborted / AbortSignal.any / URL.parse 等 14 项）由构建期 polyfill 覆盖，WebView 96 实测正常
 - **没有桌面环境**：不能运行 Linux GUI 桌面应用；视觉产物通过本地 HTTP + 内置 WebView 预览
 - **模拟点击是"半盲"的**：读屏基于无障碍节点树，对纯图形/游戏画面无效
 - **Android 13+ 开启无障碍需系统确认**：侧载安装的应用，系统会弹出「允许完全控制设备」对话框，必须手动点 Allow 才生效；adb 直接写入设置会被系统清掉（真机请走 UI 指引）
@@ -249,7 +249,7 @@ gradle assembleDebug -Pabi=arm64-v8a
 
 **数据会上传吗？** 引擎/会话/工作区全在本机；数据是否出设备取决于你配置的模型服务地址。
 
-**APK 为什么约 144MB？** 内置了完整的 Node.js bionic 运行时、19 项扩展的工具链闭包以及 dsh 的依赖树。这是「不依赖 Termux、装完即用」的代价；Termux 系方案把这部分留给用户自行安装，所以包体更小，但首次使用需要先配置环境。
+**APK 为什么约 227MB？** 内置了完整的 Node.js bionic 运行时（解压后约 494 MB）、19 项扩展的工具链闭包、dsh 的依赖树，以及内置的 SSH 远程工作区插件（v1.4.18 起）。这是「不依赖 Termux、装完即用」的代价；Termux 系方案把这部分留给用户自行安装，所以包体更小，但首次使用需要先配置环境。
 
 **Agent 怎么展示网页？** 让它起本地 HTTP 服务并给你 `http://127.0.0.1:端口` 链接，点开即预览。
 

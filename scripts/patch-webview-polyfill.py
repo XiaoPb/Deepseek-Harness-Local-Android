@@ -35,11 +35,15 @@ import re
 
 MARK_PREFIX = '<!-- [dsh-android] legacy-webview polyfill v'
 
-POLYFILL = r'''<!-- [dsh-android] legacy-webview polyfill v3 -->
+POLYFILL = r'''<!-- [dsh-android] legacy-webview polyfill v4 -->
 <script>
 /* [dsh-android] polyfill for legacy WebView (Chrome <126).
    Covers the modern Web APIs used by the dsh frontend, pdf.js and Excel preview.
-   Every guard is "if missing", so modern WebView is unaffected. */
+   Every guard is "if missing", so modern WebView is unaffected.
+   v4: + AbortSignal#throwIfAborted (Chrome 100, issue #40 — dsh client runners
+       call signal?.throwIfAborted() and TypeError on WebView 96),
+       + AbortSignal#reason via AbortController#abort wrapper (Chrome 98:
+       abort(reason) fires events but never stores the reason on 96/97). */
 (function () {
   'use strict';
   function def(obj, name, value) {
@@ -113,7 +117,9 @@ POLYFILL = r'''<!-- [dsh-android] legacy-webview polyfill v3 -->
 
   /* ---- structuredClone (Chrome 98) ---- */
   if (typeof structuredClone === 'undefined') {
-    window.structuredClone = function (v) {
+    /* globalThis：主文档 window 与 Worker 均可（window 在 Worker 里不存在，
+       会让整个 polyfill IIFE 中断——v3 的隐性缺陷）。 */
+    globalThis.structuredClone = function (v) {
       try { return JSON.parse(JSON.stringify(v)); } catch (e) { return v; }
     };
   }
@@ -142,6 +148,38 @@ POLYFILL = r'''<!-- [dsh-android] legacy-webview polyfill v3 -->
       if (i < 0 || i >= a.length) throw new RangeError('Invalid index');
       a[i] = v;
       return a;
+    });
+  }
+
+  /* ---- AbortSignal#throwIfAborted (Chrome 100, issue #40) ---- */
+  /* dsh 客户端 runner（openai 风格）在轮询处调用 signal?.throwIfAborted()，
+     WebView 96/97/98/99 上是 TypeError → dynamicCordisRunner 等整链失败。 */
+  if (typeof AbortSignal !== 'undefined' && !AbortSignal.prototype.throwIfAborted) {
+    def(AbortSignal.prototype, 'throwIfAborted', function () {
+      if (this.aborted) {
+        throw (this.reason !== undefined ? this.reason
+          : new DOMException('The operation was aborted.', 'AbortError'));
+      }
+    });
+  }
+
+  /* ---- AbortSignal#reason (Chrome 98) ---- */
+  /* 96/97 的 abort(reason) 只触发事件、不保存 reason——而上面的 throwIfAborted
+     与消费方都要读它。包装只在原型缺 reason 的内核启用：先挂 reason、再调
+     原生 abort（原生调用会同步触发 abort 事件，监听器届时必须能读到）。 */
+  if (typeof AbortController !== 'undefined' && typeof AbortSignal !== 'undefined' &&
+      !('reason' in AbortSignal.prototype)) {
+    var origAbort = AbortController.prototype.abort;
+    def(AbortController.prototype, 'abort', function (reason) {
+      var sig = this.signal;
+      if (sig && !sig.aborted) {
+        var r = arguments.length ? reason
+          : new DOMException('The operation was aborted.', 'AbortError');
+        try {
+          Object.defineProperty(sig, 'reason', { value: r, writable: true, enumerable: false, configurable: true });
+        } catch (e) {}
+      }
+      return origAbort ? origAbort.apply(this, arguments) : undefined;
     });
   }
 
@@ -237,16 +275,11 @@ POLYFILL = r'''<!-- [dsh-android] legacy-webview polyfill v3 -->
 
 ANCHOR_RE = re.compile(r'<script[^>]*type="module"[^>]*>')
 
+HTML_REL = 'lib/node_modules/@deepseek-ai/dsh-web-frontend/dist/index.html'
 
-def patch(root: str) -> None:
-    html_path = os.path.join(root, 'lib', 'node_modules', '@deepseek-ai',
-                             'dsh-web-frontend', 'dist', 'index.html')
-    if not os.path.isfile(html_path):
-        print(f'WARN: frontend index.html not found at {html_path}')
-        return
-    with open(html_path, 'r', encoding='utf-8') as f:
-        s = f.read()
 
+def patch_html(s: str) -> str:
+    """对 index.html 文本应用（或升级）polyfill；幂等，返回新文本。"""
     # 幂等：先移除任何旧版本（含其后的注释行），再插入当前版本 —— 便于升级 polyfill。
     # 注意旧版注入会产生"注释 + 注释 + script"三段（脚本自带的 MARK 与内联注释重复），
     # 只删 script 块会留下孤立注释（实测 v2 注释残留）。
@@ -255,17 +288,58 @@ def patch(root: str) -> None:
 
     m = ANCHOR_RE.search(s)
     if not m:
-        print('WARN: module script anchor not found; skipped')
+        raise SystemExit('错误：module script anchor not found（前端形态已变？）')
+    return s[:m.start()] + POLYFILL + '\n' + s[m.start():]
+
+
+def patch(root: str) -> None:
+    html_path = os.path.join(root, *HTML_REL.split('/'))
+    if not os.path.isfile(html_path):
+        print(f'WARN: frontend index.html not found at {html_path}')
         return
-    s = s[:m.start()] + POLYFILL + '\n' + s[m.start():]
+    with open(html_path, 'r', encoding='utf-8') as f:
+        s = f.read()
+    s = patch_html(s)
     with open(html_path, 'w', encoding='utf-8', newline='') as f:
         f.write(s)
-    print('polyfill v3 injected:', html_path)
+    print('polyfill v4 injected:', html_path)
+
+
+def patch_zip(zpath: str) -> None:
+    """对 runtime.zip 内的 index.html 原地升级 polyfill（构建门禁的自动补救）。"""
+    import shutil
+    import zipfile
+    p = zipfile.Path(zpath) if False else None  # zipfile 无就地改写；走全量重写
+    with zipfile.ZipFile(zpath) as z:
+        try:
+            s = z.read(HTML_REL).decode('utf-8')
+        except KeyError:
+            raise SystemExit(f'错误：zip 内无 {HTML_REL}（runtime 形态已变？）')
+        items = [(i, z.read(i.filename)) for i in z.infolist()]
+    new_s = patch_html(s)
+    if new_s == s:
+        print('polyfill v4 already present:', zpath)
+        return
+    tmp = zpath + '.tmp'
+    with zipfile.ZipFile(tmp, 'w', zipfile.ZIP_DEFLATED) as z:
+        for info, data in items:
+            if info.filename == HTML_REL:
+                data = new_s.encode('utf-8')
+            z.writestr(info, data)
+    shutil.move(tmp, zpath)
+    print('polyfill v4 injected (zip):', zpath)
 
 
 if __name__ == '__main__':
-    # 目标目录只从 DSH_PATCH_TARGET 环境变量读取（不接受命令行路径）
+    # 目标目录只从 DSH_PATCH_TARGET 环境变量读取（不接受命令行路径）；
+    # --zip <runtime.zip>：对 zip 内 index.html 原地打补丁（构建门禁补救用）。
     raw = os.environ.get('DSH_PATCH_TARGET', '')
+    argv = [a for a in sys.argv[1:]]
+    if argv[:1] == ['--zip']:
+        if len(argv) != 2:
+            sys.exit('usage: patch-webview-polyfill.py --zip <runtime.zip>')
+        patch_zip(argv[1])
+        sys.exit(0)
     if not raw:
         sys.exit('rejected: DSH_PATCH_TARGET not set by caller')
     patch(os.path.realpath(raw))

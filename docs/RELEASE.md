@@ -109,7 +109,8 @@ CI 每次 tag 构建都会用 `apksigner verify --print-certs` 比对实际签�
 |---|---|
 | push 分支（非 main）/ PR | 只构建 **debug**（正式签名材料不存在时不跑 `assembleRelease`，不会失败） |
 | push `main` | 构建 debug + release（Gradle 自动签名、`apksigner` 校验证书），更新 **edge 预发布**；缺 secrets 时 edge 任务失败并提示配置（不会发布半套） |
-| push tag `v*` | **必须有** `RELEASE_*` secrets：构建 debug + release、校验证书指纹，缺 secret 直接失败 |
+| 每日 01:30 定时（schedule） | 构建 debug（双架构）→ publish-preview 更新滚动预发布 **preview**；不需要签名材料 |
+| push tag <major>.<minor>.<patch> | **必须有** RELEASE_* secrets：构建 debug + release、校验证书指纹，缺 secret 直接失败；**禁止 *.*.*-***（首个 job 校验 tag 格式直接失败） |
 | tag 且通过 | `publish-release` 发布双架构 × 双变体到正式 GitHub Release |
 
 产物命名（文件名带当前 `versionName`）：
@@ -131,9 +132,10 @@ dsh-android-v1.4.18-x86_64-release.apk
 > - 每次发布完成后会**清理 Release 中不在本次产物列表里的旧文件名**（edge 的滚动资产因此
 >   不会残留旧命名）。
 > - `*-release.apk`：正式签名，可覆盖升级；`*-debug.apk`：debug 签名，仅测试，不能覆盖正式版。
-> - **edge** 是一个滚动 pre-release（tag `edge`），每次 `main` 推送覆盖同名资产，方便用户随时下载；
->   `v*` tag 才是正式版本。
-> - `publish-release` / `publish-edge` / `release` 默认只对
+> - **edge** 是一个滚动 pre-release（tag `edge`），每次 `main` 推送覆盖同名资产，方便用户随时下载。
+> - **preview** 是每日 01:30 定时构建出的滚动 pre-release（tag `preview`，debug 签名），供预览/试用；
+>   正式版本只认严格 tag `v<major>.<minor>.<patch>`，**禁止 `v*.*.*-*`**（如 `v1.4.18-380`）。
+> - `publish-release` / `publish-edge` / `publish-preview` 默认只对
 >   `Soodok/Deepseek-Harness-Local-Android` 生效。Fork 用户若想自己编译并发布，
 >   在仓库 **Settings → Secrets and variables → Actions → Variables** 新建
 >   `ENABLE_CI_IN_FORK=true` 即可（PR 仍不发；签名材料需自行配置）。
@@ -145,8 +147,9 @@ dsh-android-v1.4.18-x86_64-release.apk
 1. **升版本**（同一版本只能有一个正式包）：
    `app/build.gradle.kts` 的 `versionCode` +1、`versionName` 改为新版本。
 2. 跑本地检查：`python scripts/check-i18n.py`、测试、`assembleDebug`。
-3. 提交并推送 `main` —— CI 会自动更新 **edge** 预发布（debug + release），用户可先装。
-4. 正式发版：打 tag 并推送（tag 必须等于 `v<versionName>`，否则 publish 阶段失败）：
+3. 提交并推送 `main` —— CI 会自动更新 **edge** 预发布（debug + release），用户可先装；每日 01:30 还会自动产出 **preview**（debug）。
+4. 正式发版：打 tag 并推送（tag 必须是严格的 `v<major>.<minor>.<patch>` 且等于 `v<versionName>`；
+   `v*.*.*-*` 这类预发布 tag 被 CI 直接拒绝）：
 
    ```bash
    git tag v1.4.18

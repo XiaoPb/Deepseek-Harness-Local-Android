@@ -50,7 +50,7 @@ Alle Werte stammen aus Tests auf echten Geräten und im Emulator, nicht aus der 
 | **Kaltstart bis Engine bereit** | **< 10 s** | OnePlus 15T (Android 16), echtes Gerät; ~15 s auf Tablets |
 | **Speicher mit parallelen Diensten** | **< 400 MB** | Engine + mehrere Toolchains gleichzeitig |
 | **Android-Kompatibilität** | **8.0 → 16** | WebView ≥ Chrome 85 erforderlich (siehe unten) |
-| **APK-Größe** | **~130 MB** | Vollständige Node.js-Laufzeit + 19 Erweiterungs-Toolchains |
+| **APK-Größe** | **~227 MB** | Vollständige Node.js-Laufzeit + 19 Erweiterungs-Toolchains + integriertes SSH-Workspace-Plugin |
 | **Toolchains** | **19 One-Tap-Installationen** | Python/Go/Rust/Clang/OpenJDK/FFmpeg… |
 
 Zum Vergleich: Termux-Snapshot-basierte Alternativen brauchen beim ersten Start üblicherweise **mehrere Minuten** (Entpacken + manuelle Initialisierung); DSH Mobile liefert seine Laufzeit im APK aus — installieren und loslegen.
@@ -179,7 +179,7 @@ gradle assembleDebug -Pabi=arm64-v8a
 
 Alternativ: Forke das Repository und lasse den Workflow **android-build** auf GitHub Actions in der Cloud ein APK bauen.
 
-**Systemvoraussetzungen**: Android 8.0+ (**WebView ≥ Chrome 85**, siehe Grenzen) · arm64-v8a / x86_64 · **700 MB+ freier Speicher empfohlen** (APK ~130 MB plus die entpackte Laufzeit).
+**Systemvoraussetzungen**: Android 8.0+ (**WebView ≥ Chrome 85**, siehe Grenzen) · arm64-v8a / x86_64 · **700 MB+ freier Speicher empfohlen** (APK ~227 MB plus die ~494 MB entpackte Laufzeit).
 
 ## 🚀 Schnellstart
 
@@ -193,13 +193,13 @@ Alternativ: Forke das Repository und lasse den Workflow **android-build** auf Gi
 
 **Wird Root benötigt?** Nein. Der Normal-Modus deckt die überwältigende Mehrheit der Anwendungsfälle ab; Root und Shizuku sind optionale Ausbaustufen.
 
-**Wie verhält sich das zum Termux-Ansatz?** Parallele Routen, kein Ersatz. Die Termux-Route **baut eine Linux-Umgebung** unter Android (manuelle Einrichtung / Ein-Klick-Skript / proot + Ubuntu) und betreibt dsh darin; dieses Projekt **baut die von dsh benötigte Laufzeit direkt ins APK**, sodass du installierst und loslegst — zum Preis eines Pakets von ~130 MB. **Beide betreiben dasselbe dsh** — entscheide danach, welchen Einrichtungsaufwand du für eine Live-Umgebung zahlen willst.
+**Wie verhält sich das zum Termux-Ansatz?** Parallele Routen, kein Ersatz. Die Termux-Route **baut eine Linux-Umgebung** unter Android (manuelle Einrichtung / Ein-Klick-Skript / proot + Ubuntu) und betreibt dsh darin; dieses Projekt **baut die von dsh benötigte Laufzeit direkt ins APK**, sodass du installierst und loslegst — zum Preis eines Pakets von ~227 MB. **Beide betreiben dasselbe dsh** — entscheide danach, welchen Einrichtungsaufwand du für eine Live-Umgebung zahlen willst.
 
 **Ist der Agent selbst nachimplementiert?** Nein. Agent-Logik, Plugin-System und WebUI stammen alle vom offiziellen [`@deepseek-ai/dsh`](https://github.com/deepseek-ai/deepseek-harness); dieses Projekt liefert nur die Laufzeitumgebung für Android (bionic-Node.js-Laufzeit, Vordergrunddienst, Berechtigungsstufen, Erweiterungszentrum). Deshalb wird es als **Port** und nicht als Framework bezeichnet.
 
 **Werden meine Daten hochgeladen?** Engine, Sitzungen und Arbeitsbereich liegen vollständig lokal; ob Daten das Gerät verlassen, hängt vom von dir konfigurierten Modell-Dienstendpunkt ab.
 
-**Warum ist die APK ~130 MB groß?** Sie enthält die vollständige bionic-Node.js-Laufzeit, den Termux-Toolchain-Abschluss (bash / ripgrep / SONAME-Bibliotheken) sowie dshs gesamten Abhängigkeitsbaum (79 Pakete ab 0.2.0) — der Preis für „ohne Termux, installieren und loslegen". Termux-Lösungen lassen all das extern und vom Nutzer installiert, sind deshalb kleiner, brauchen aber beim ersten Start Minuten an Einrichtung.
+**Warum ist die APK ~227 MB groß?** Sie enthält die vollständige bionic-Node.js-Laufzeit (~494 MB entpackt), den Termux-Toolchain-Abschluss (bash / ripgrep / SONAME-Bibliotheken), dshs gesamten Abhängigkeitsbaum (79 Pakete ab 0.2.0) sowie das integrierte SSH-Workspace-Plugin (ab v1.4.18) — der Preis für „ohne Termux, installieren und loslegen". Termux-Lösungen lassen all das extern und vom Nutzer installiert, sind deshalb kleiner, brauchen aber beim ersten Start Minuten an Einrichtung.
 
 **Wie zeigt mir der Agent eine Webseite?** Bitte ihn, einen lokalen HTTP-Server zu starten, und er übergibt dir einen `http://127.0.0.1:<Port>`-Link; tippe darauf, um die Vorschau zu öffnen.
 

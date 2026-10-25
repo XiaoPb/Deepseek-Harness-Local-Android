@@ -51,9 +51,9 @@ All figures come from real-device / emulator testing, not theory:
 |---|---|---|
 | **Cold start to engine ready** | **< 10 s** | OnePlus 15T (Android 16), real device |
 | **Memory with parallel services** | **< 400 MB** | Engine + multiple toolchains running together |
-| **Android compatibility** | **8.0 → 16** | Requires WebView ≥ Chrome 85 (see below) |
-| **APK size** | **~144 MB** | Full Node.js runtime + toolchain closure for 19 extensions |
-| **Installed size** | **~500 MB** | After runtime extraction |
+| **Android compatibility** | **8.0 → 16** | Requires WebView ≥ Chrome 85 (APIs polyfilled; Chrome 96 verified, see below) |
+| **APK size** | **~227 MB** | Full Node.js runtime + toolchain closure for 19 extensions + bundled SSH workspace plugin |
+| **Installed size** | **~720 MB** | Runtime unpacks to ~494 MB + the app itself |
 
 The runtime and toolchain ship in the APK, so you can start the upstream dsh engine without first setting up Termux or a proot/Ubuntu container.
 
@@ -195,7 +195,7 @@ gradle assembleDebug -Pabi=arm64-v8a
 
 Alternatively, fork the repo and run the **android-build** workflow on GitHub Actions for a cloud build.
 
-**Requirements**: Android 8.0+ (**WebView ≥ Chrome 85**, see Limits) · arm64-v8a / x86_64 · **700MB+ free storage recommended** (APK ~144MB plus the unpacked runtime).
+**Requirements**: Android 8.0+ (**WebView ≥ Chrome 85**, see Limits) · arm64-v8a / x86_64 · **700MB+ free storage recommended** (APK ~227MB plus the ~494MB unpacked runtime).
 
 ## 🚀 Quick Start
 
@@ -209,13 +209,13 @@ Alternatively, fork the repo and run the **android-build** workflow on GitHub Ac
 
 **Does it require Root?** No. Normal mode covers the vast majority of use cases; Root/Shizuku are optional advanced tiers.
 
-**How does this relate to the Termux approach?** Parallel routes, not replacements. The Termux route **builds a Linux environment** on Android (manual setup / one-click script / proot + Ubuntu) and runs dsh inside it; this project **packs dsh's runtime into the APK** so you install and go, at the cost of a ~144 MB package. **Both run the same dsh** — choose by how much setup cost you're willing to pay for a live environment.
+**How does this relate to the Termux approach?** Parallel routes, not replacements. The Termux route **builds a Linux environment** on Android (manual setup / one-click script / proot + Ubuntu) and runs dsh inside it; this project **packs dsh's runtime into the APK** so you install and go, at the cost of a ~227 MB package. **Both run the same dsh** — choose by how much setup cost you're willing to pay for a live environment.
 
 **Does it reimplement the agent itself?** No. Agent logic, plugin system, and WebUI all come from the official [`@deepseek-ai/dsh`](https://github.com/deepseek-ai/deepseek-harness); this project only provides the Android-side runtime (bionic Node.js runtime, foreground service, privilege tiers, Extension Center). That is why it is described as a **port**, not a framework.
 
 **Is my data uploaded?** The engine, sessions, and workspace are all local; whether data leaves the device depends on the model service endpoint you configure.
 
-**Why is the APK ~144MB?** It bundles the complete bionic Node.js runtime, the toolchain closure for 19 extensions, and dsh's dependency tree — the price of "no Termux required, install and go". Termux-family routes keep that setup external and installed by the user, so their package is smaller but first use requires environment setup.
+**Why is the APK ~227MB?** It bundles the complete bionic Node.js runtime (~494MB unpacked), the toolchain closure for 19 extensions, dsh's dependency tree, and the bundled SSH workspace plugin (since v1.4.18) — the price of "no Termux required, install and go". Termux-family routes keep that setup external and installed by the user, so their package is smaller but first use requires environment setup.
 
 **How does the Agent show me a web page?** Ask it to start a local HTTP server and give you a `http://127.0.0.1:port` link; tap to preview.
 
