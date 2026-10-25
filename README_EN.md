@@ -52,7 +52,7 @@ All figures come from real-device / emulator testing, not theory:
 | **Cold start to engine ready** | **< 10 s** | OnePlus 15T (Android 16), real device |
 | **Memory with parallel services** | **< 400 MB** | Engine + multiple toolchains running together |
 | **Android compatibility** | **8.0 → 16** | Requires WebView ≥ Chrome 85 (APIs polyfilled; Chrome 96 verified, see below) |
-| **APK size** | **~227 MB** | Full Node.js runtime + toolchain closure for 19 extensions + bundled SSH workspace plugin |
+| **APK size** | **full ~150–230 MB / lite ~25 MB** | Full bundles Node.js; the noruntime package downloads the runtime on first launch |
 | **Installed size** | **~720 MB** | Runtime unpacks to ~494 MB + the app itself |
 
 The runtime and toolchain ship in the APK, so you can start the upstream dsh engine without first setting up Termux or a proot/Ubuntu container.
@@ -179,24 +179,35 @@ Normal mode is the default; choose Shizuku or Root only when the task requires a
 
 ## 📦 Installation
 
-**Download a Release (recommended)**: grab the APK from [Releases](https://github.com/Soodok/Deepseek-Harness-Local-Android/releases) (pick `arm64-v8a` for phones; latest is **v1.4.17**), then install with unknown sources allowed. Any v1.0.0+ build can be installed over the top.
+**Download a Release (recommended)**: grab the APK from [Releases](https://github.com/Soodok/Deepseek-Harness-Local-Android/releases) (pick `arm64-v8a` for phones; latest is **v1.4.19**), then install with unknown sources allowed.
 
-> 📦 **Which file to pick**: normal users want **`dsh-mobile-*-arm64-v8a.apk`** (release-signed).
-> Names ending in **`-debug`** are debug-signed builds - for log capture, or for users already on a
-> debug-channel install who need a matching signature to update. Packages tagged `x86_64` are for
-> emulators only. Release and debug builds **cannot be installed over each other** (signature
-> mismatch) - switching requires uninstalling first.
+> 📦 **Which file to pick**:
+> - **Full package** (no `-noruntime` suffix): bundles the Node.js runtime (~150–230 MB), works offline.
+> - **noruntime package** (`*-noruntime.apk`): much smaller; on first launch it downloads the runtime
+>   from the link in `MANIFEST.json` (gh-proxy supported). App updates no longer re-download the runtime.
+>
+> Both variants include the bundled SSH plugin; runtime updates are available under About → Runtime.
+> Names ending in **`-debug`** are debug-signed builds; release and debug builds cannot be installed
+> over each other. `x86_64` packages are for emulators only.
 
 **Build from source** (JDK 17 + Android SDK, NDK r26+, CMake 3.22.1):
 
 ```bash
-./scripts/collect-termux-runtime.sh app/src/main/assets/runtime.zip aarch64
-gradle assembleDebug -Pabi=arm64-v8a
+# Linux/CI: unified runtime pipeline (collect + dedupe + verify + BUILD.json)
+./scripts/build-runtime.sh --abi arm64-v8a --out dist/runtime-arm64-v8a.zip
+
+# full package
+gradle assembleDebug -Ppackage=full -PruntimeZip="$PWD/dist/runtime-arm64-v8a.zip" \
+  -PhardsshDir="$PWD/dist/hardssh"
+# noruntime package (no embedded runtime)
+gradle assembleDebug -Ppackage=noruntime -PhardsshDir="$PWD/dist/hardssh"
 ```
+
+The bundled hardssh directory is assembled by `scripts/pack-hardssh.sh` from the upstream Release tgz (npm latest by default).
 
 Alternatively, fork the repo and run the **android-build** workflow on GitHub Actions for a cloud build.
 
-**Requirements**: Android 8.0+ (**WebView ≥ Chrome 85**, see Limits) · arm64-v8a / x86_64 · **700MB+ free storage recommended** (APK ~227MB plus the ~494MB unpacked runtime).
+**Requirements**: Android 8.0+ (**WebView ≥ Chrome 85**, see Limits) · arm64-v8a / x86_64 · **1.2 GB+ free storage recommended** for a staged runtime update (full APK ~150–230 MB; runtime unpacks to ~494 MB).
 
 ## 🚀 Quick Start
 
@@ -216,7 +227,7 @@ Alternatively, fork the repo and run the **android-build** workflow on GitHub Ac
 
 **Is my data uploaded?** The engine, sessions, and workspace are all local; whether data leaves the device depends on the model service endpoint you configure.
 
-**Why is the APK ~227MB?** It bundles the complete bionic Node.js runtime (~494MB unpacked), the toolchain closure for 19 extensions, dsh's dependency tree, and the bundled SSH workspace plugin (since v1.4.18) — the price of "no Termux required, install and go". Termux-family routes keep that setup external and installed by the user, so their package is smaller but first use requires environment setup.
+**Why is the APK so large?** The full package bundles the complete bionic Node.js runtime (~494 MB unpacked), the toolchain closure for 19 extensions, and dsh's dependency tree. Since v1.4.20 a **noruntime package** is also published: no runtime inside, app updates are tens of MB, and the runtime is downloaded on first launch and can be updated independently. Termux-family routes keep that setup external and installed by the user, so their package is smaller but first use requires environment setup.
 
 **How does the Agent show me a web page?** Ask it to start a local HTTP server and give you a `http://127.0.0.1:port` link; tap to preview.
 
