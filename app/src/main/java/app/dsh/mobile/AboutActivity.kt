@@ -10,6 +10,7 @@ import android.widget.TextView
 import android.widget.Toast
 import app.dsh.mobile.engine.EngineConfig
 import app.dsh.mobile.engine.RepoConfig
+import app.dsh.mobile.engine.RuntimeDownloadConfig
 import app.dsh.mobile.engine.RuntimeIndexClient
 import app.dsh.mobile.engine.RuntimeInstaller
 import org.json.JSONObject
@@ -65,7 +66,14 @@ class AboutActivity : ThemedActivity() {
         }
 
         // 运行时更新（v1.4.20）：与 App 更新解耦；索引必须验签。
+        // v1.4.21：安装进行中忽略再次点击 —— 否则第二次点击会重新走检查，
+        // 检查完又变成「可安装」，再点一次就撞进安装器（旧版直接抛
+        // “runtime install already in progress”）。
         findViewById<android.view.View>(R.id.rowRuntime).setOnClickListener {
+            if (runtimeInstalling || RuntimeInstaller.installing) {
+                Toast.makeText(this, R.string.about_runtime_busy, Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
             val pending = pendingRuntime
             if (pending != null) installRuntime(pending) else checkRuntime()
         }
@@ -74,8 +82,14 @@ class AboutActivity : ThemedActivity() {
     /** 待安装的运行时（检查到更新后由再次点击触发） */
     private var pendingRuntime: RuntimeIndexClient.Entry? = null
 
+    /** 本页是否已经拉起安装线程（防止同一页面内重复点击） */
+    @Volatile
+    private var runtimeInstalling = false
+
     private val runtimeIndexUrl: String get() = RepoConfig.RELEASES_LATEST + "/runtime-index.json"
-    private val runtimeProxy: String get() = "https://gh-proxy.org/"
+
+    /** 从设置页读取下载代理；默认 gh-proxy.org，留空则直连。 */
+    private fun runtimeProxy(): String = RuntimeDownloadConfig.proxy(this)
 
     private fun checkRuntime() {
         val tv = findViewById<TextView>(R.id.txtRuntime)
@@ -84,9 +98,10 @@ class AboutActivity : ThemedActivity() {
         tv.setTextColor(getColor(R.color.text_secondary))
         val abi = deviceAbi()
         val code = currentVersionCode()
+        val proxy = runtimeProxy()
         Thread({
             val entry = RuntimeIndexClient.resolve(
-                this, runtimeIndexUrl, runtimeProxy, abi, null, code,
+                this, runtimeIndexUrl, proxy, abi, null, code,
             )
             runOnUiThread {
                 when {
@@ -116,6 +131,8 @@ class AboutActivity : ThemedActivity() {
         tv.text = getString(R.string.about_runtime_installing, 0)
         tv.setTextColor(getColor(R.color.accent))
         pendingRuntime = null
+        runtimeInstalling = true
+        val proxy = runtimeProxy()
         Thread({
             // 运行中的引擎会持续读 engine/lib；先停引擎再替换运行时，成功后自动重启。
             val app = application as DshApp
@@ -124,7 +141,7 @@ class AboutActivity : ThemedActivity() {
                 RuntimeInstaller(this).installFromIndex(
                     entry = entry,
                     indexUrl = runtimeIndexUrl,
-                    proxies = listOf(runtimeProxy),
+                    proxies = listOfNotNull(proxy.takeIf { it.isNotBlank() }),
                     onProgress = { frac ->
                         val pct = (frac * 100).toInt()
                         runOnUiThread {
@@ -145,6 +162,7 @@ class AboutActivity : ThemedActivity() {
                     tv.setTextColor(getColor(R.color.danger))
                 }
             } finally {
+                runtimeInstalling = false
                 runCatching { app.supervisor.restart() }
             }
         }, "runtime-install").apply { isDaemon = true; start() }

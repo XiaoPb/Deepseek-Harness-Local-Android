@@ -173,7 +173,7 @@ Normaler Modus ist der Standard; Optionen, deren Fähigkeit noch nicht bereitste
 
 > 📦 **Welche Datei?**
 > - **Vollversion** (ohne `-noruntime`): enthält die Node.js-Laufzeit (~150–230 MB), offline nutzbar.
-> - **noruntime** (`*-noruntime.apk`): deutlich kleiner; lädt die Laufzeit beim ersten Start über den Link in `MANIFEST.json` (gh-proxy unterstützt). App-Updates laden die Laufzeit nicht erneut.
+> - **noruntime** (`*-noruntime.apk`): deutlich kleiner; lädt die Laufzeit beim ersten Start über den Link in `MANIFEST.json`. Standardmäßig über den `gh-proxy.org`-Präfixproxy (direkte GitHub-Downloads sind in einigen Regionen unzuverlässig); änderbar unter Einstellungen → Erweiterungen → Runtime-Download-Proxy, inklusive direkter Verbindung. App-Updates laden die Laufzeit nicht erneut.
 >
 > Beide enthalten das integrierte SSH-Plugin; Laufzeit-Updates gibt es unter „Über → Runtime“.
 > `-debug`-Builds sind nur zum Testen; Release und Debug lassen sich nicht gegenseitig installieren.

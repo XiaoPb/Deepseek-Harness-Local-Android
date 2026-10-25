@@ -104,6 +104,13 @@ class RuntimeInstaller(private val ctx: Context) {
     fun ensureInstalled(
         onProgress: (Float) -> Unit = {},
         onDetail: (BootTrace.Install) -> Unit = {},
+    ): Boolean = synchronized(INSTALL_LOCK) {
+        ensureInstalledLocked(onProgress, onDetail)
+    }
+
+    private fun ensureInstalledLocked(
+        onProgress: (Float) -> Unit,
+        onDetail: (BootTrace.Install) -> Unit,
     ): Boolean {
         recoverPendingHealth()
         val manifest = readManifest()
@@ -231,6 +238,11 @@ class RuntimeInstaller(private val ctx: Context) {
     /**
      * 显式安装云端索引里的运行时（设置/关于页“检查运行时更新”）。
      * 与首启安装走同一条 staging 流程；调用方需在后台线程执行。
+     *
+     * v1.4.21：不再用 `check(!installing)` 抛 “runtime install already in progress”。
+     * 那个布尔量是**进程级**的，引擎启动时的自动安装也会置位 —— 用户在启动安装
+     * 期间点更新、或连点两次更新，就会直接撞上这条英文异常。现在改为串行等待：
+     * 同一时刻只有一个安装真正落盘，后到的请求排队而不是报错。
      */
     fun installFromIndex(
         entry: RuntimeIndexClient.Entry,
@@ -238,8 +250,7 @@ class RuntimeInstaller(private val ctx: Context) {
         proxies: List<String>,
         onProgress: (Float) -> Unit = {},
         onDetail: (BootTrace.Install) -> Unit = {},
-    ): String {
-        check(!installing) { "runtime install already in progress" }
+    ): String = synchronized(INSTALL_LOCK) {
         val info = RuntimeInfo(
             version = entry.version,
             builtAt = entry.builtAt,
@@ -252,7 +263,7 @@ class RuntimeInstaller(private val ctx: Context) {
         )
         val manifest = Manifest("noruntime", defaultAbi(), info, indexUrl, proxies)
         install(manifest, onProgress, onDetail)
-        return entry.version
+        entry.version
     }
 
     /** 读安装元数据（.runtime.json），旧安装回退到纯文本版戳。 */
@@ -443,6 +454,12 @@ class RuntimeInstaller(private val ctx: Context) {
         }
     }
 
+    /**
+     * 真正的下载 + 解压 + 换名。
+     *
+     * ⚠️ 调用方必须持有 [INSTALL_LOCK]（[ensureInstalled] / [installFromIndex]
+     * 已经代劳），否则会和另一个安装同时写 `engine/`。
+     */
     private fun install(
         manifest: Manifest,
         onProgress: (Float) -> Unit,
@@ -473,6 +490,9 @@ class RuntimeInstaller(private val ctx: Context) {
                 requireFree(unpackMb * 2 + mb(assetZip.length()) + 200)
             } else {
                 val abi = manifest.abi.ifBlank { defaultAbi() }
+                // v1.4.21：代理来自用户偏好（默认 gh-proxy.org），不再只信 MANIFEST。
+                // MANIFEST 保留直连地址作为兜底，代理地址由这里统一生成并排到最前。
+                val proxy = RuntimeDownloadConfig.proxy(ctx)
                 var urls = info.urls.ifEmpty { listOfNotNull(info.url) }
                 var pinned = info.sha256?.takeIf { it.isNotBlank() }
                 var expectedSize = info.size
@@ -482,7 +502,7 @@ class RuntimeInstaller(private val ctx: Context) {
                     val entry = RuntimeIndexClient.resolve(
                         ctx = ctx,
                         indexUrl = manifest.indexUrl,
-                        proxyBase = manifest.proxies.firstOrNull(),
+                        proxyBase = proxy,
                         abi = abi,
                         exactVersion = info.version,
                         currentVersionCode = currentVersionCode(),
@@ -493,6 +513,14 @@ class RuntimeInstaller(private val ctx: Context) {
                         urls = (urls + entry.urls).distinct()
                     }
                 }
+                // 用户显式留空（直连）时，把 MANIFEST/索引里预置的镜像地址剔掉；
+                // 若剔完没有可用直连地址，则保留原列表兜底（至少还能下载）。
+                val blockedProxies = if (proxy.isBlank()) {
+                    (manifest.proxies + RuntimeDownloadConfig.DEFAULT_PROXY).distinct()
+                } else {
+                    emptyList()
+                }
+                urls = RuntimeDownloadConfig.orderUrls(urls, proxy, blockedProxies)
                 if (urls.isEmpty()) {
                     throw IllegalStateException(ctx.getString(R.string.error_runtime_no_source))
                 }
@@ -829,6 +857,19 @@ class RuntimeInstaller(private val ctx: Context) {
         @Volatile
         var installing: Boolean = false
             private set
+
+        /**
+         * 进程级安装锁（v1.4.21）。
+         *
+         * `installing` 只是「有没有人在装」的标志，不能用来互斥 —— 引擎首启的
+         * 自动安装、关于页的显式更新、以及可能被服务重新拉起的启动流程会并发
+         * 进入。两个安装同时解压/换名会把 engine 目录拆坏，而此前 About 的
+         * `check(!installing)` 只是把后来者挡在门外（并抛出英文异常）。
+         *
+         * 现在所有入口都在这把锁上排队；`installing` 仍然保留给扩展中心做
+         * 「运行时装配中不要装扩展」的判断。
+         */
+        private val INSTALL_LOCK = Any()
 
         private const val TAG = "RuntimeInstaller"
 
