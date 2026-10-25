@@ -7,7 +7,8 @@
 - **发布语义（本仓库，固定）**：
   - 正式版：只接受严格 tag `v<major>.<minor>.<patch>`（如 `v1.4.20`），push tag → `publish-release`；
     **禁止 `v*.*.*-*`**（如 `v1.4.18-380`）——CI 首个 job 校验失败，不会发版。
-  - 预览版：每日 01:30 `schedule` → `publish-preview`，双架构 debug 包发到滚动 prerelease `preview`，
+  - 预览版：每日 01:30 Asia/Shanghai `schedule` → `publish-preview`（cron 写 `30 17 * * *`，GitHub 按 UTC 解析；
+    workflow 级 `TZ: Asia/Shanghai` 供其余步骤使用），双架构 debug 包发到滚动 prerelease `preview`，
     覆盖同名资产并清理旧文件名，只保留最新一版。
   - edge：push `main` → `publish-edge`（debug + release，滚动 `edge`）。
 - 刷包根因记录：旧 release job 每次 push/定时新建 `v<ver>-<run>` Release，该 tag 又命中
