@@ -144,6 +144,23 @@
                 android:value="local_ai_agent_engine" />
         </service>
 
+        <!-- 桌宠悬浮窗（预留，用户安装 dsh-pet-bridge 后自行开启）：
+             独立于无障碍状态球，使用 TYPE_APPLICATION_OVERLAY，需要用户授予
+             SYSTEM_ALERT_WINDOW；前台服务类型 specialUse，避免被系统限时。 -->
+        <service
+            android:name=".pet.PetOverlayService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="floating_desktop_pet" />
+        </service>
+
+        <activity
+            android:name=".pet.PetSettingsActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|keyboardHidden" />
+
         <!-- 无障碍服务（m1.30）：为 AI 提供模拟屏幕点击；需用户在系统设置开启，
              meta-data 指向 xml/dsh_accessibility_service.xml 声明能力 -->
         <service

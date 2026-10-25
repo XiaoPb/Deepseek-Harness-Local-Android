@@ -818,6 +818,68 @@
                     android:layout_marginStart="66dp"
                     android:background="#22FFFFFF" />
 
+                <!-- 桌宠悬浮窗（v1.4.19）：预留能力，用户安装 dsh-pet-bridge 后自行开启 -->
+                <LinearLayout
+                    android:id="@+id/rowPet"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:paddingHorizontal="16dp"
+                    android:paddingVertical="14dp"
+                    android:background="?android:attr/selectableItemBackground">
+
+                    <ImageView
+                        android:layout_width="36dp"
+                        android:layout_height="36dp"
+                        android:padding="8dp"
+                        android:src="@drawable/ic_pet"
+                        android:background="@drawable/bg_icon_chip_soft"
+                        android:tint="#FF7DD3FC" />
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical"
+                        android:layout_marginStart="14dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/setting_pet"
+                            android:textColor="#FFFFFFFF"
+                            android:textSize="16sp" />
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="@string/setting_pet_sub"
+                            android:textColor="#FF8A94A3"
+                            android:textSize="12sp"
+                            android:layout_marginTop="2dp" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/valPet"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:textColor="#FF8A94A3"
+                        android:textSize="13sp"
+                        android:layout_marginEnd="6dp" />
+
+                    <ImageView
+                        android:layout_width="20dp"
+                        android:layout_height="20dp"
+                        android:src="@drawable/ic_chevron" />
+                </LinearLayout>
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="0.5dp"
+                    android:layout_marginStart="66dp"
+                    android:background="#22FFFFFF" />
+
                 <!-- 自定义指令（v1.3.2，issue #19）：在 App 环境说明之上补写用户自己的长期指令 -->
                 <LinearLayout
                     android:id="@+id/rowUserPrompt"

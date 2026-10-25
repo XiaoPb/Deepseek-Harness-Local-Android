@@ -1,0 +1,24 @@
+NOTICE
+======
+
+DSH Mobile includes code derived from the following MIT-licensed projects:
+
+1. dsh-pet-android
+   https://github.com/Tony-Chen-Stark/dsh-pet-android
+   Copyright (c) 2026 dsh-pet-android contributors
+   MIT License.
+   The throwing/spring/squash constants and formulas in
+   app/src/main/java/app/dsh/mobile/pet/PetPhysics.kt are derived from that
+   project's Physics.kt, which in turn is a line-by-line port of
+   dsh-pet's src/shared/physics.ts.
+
+   dsh-pet-android's animation assets come from PC2005-cloud/dsh-pet and are
+   licensed "open-source use allowed, commercial use prohibited". They are
+   NOT included in this repository or APK. The desktop-pet feature only reads
+   an animation pack that the user imports from their own copy.
+
+2. Test/protocol compatibility references (no code copied):
+   - dsh-pet-bridge (MIT), https://github.com/wsxwj123/dsh-plugins
+   - dsh-pet (MIT), https://github.com/PC2005-cloud/dsh-pet
+
+The rest of DSH Mobile remains under the repository's top-level LICENSE.

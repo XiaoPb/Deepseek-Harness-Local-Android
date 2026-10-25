@@ -1,4 +1,4 @@
-﻿# DSH Mobile
+# DSH Mobile
 
 **Der vollständige Android-Port von DeepSeek Harness — die offizielle dsh-Engine läuft unverändert in der App-Sandbox. Ohne Root, ohne Termux, ohne PC.**
 
@@ -104,6 +104,7 @@ Zu jeder Fähigkeit gibt es ein eigenes Dokument (Design-Abwägungen, Messwerte,
 | [UI-Plugins für schmale Bildschirme](docs/NARROW_UI.en.md) | Seitenleiste über volle Breite / Einstellungen neu angeordnet / rechtes Panel bildschirmfüllend |
 | [LAN-WebUI](docs/LAN_WEBUI.en.md) | Reverse-Proxy, 6-stelliger Code, dauerhafte Erinnerung und Stopp-Kette |
 | [Spracheingabe](docs/VOICE_INPUT.en.md) | zwei Erkennungskanäle, Sende-Deduplizierung, Panel-Parking, bekanntes Problem |
+| [Desktop-Pet-Overlay](docs/PET_OVERLAY.md) | reserviertes, plugin-gesteuertes Pet: dsh-pet-bridge, Fünf-Feld-Protokoll, Paketimport und Lizenz |
 | [Benachrichtigungen & Hintergrund](docs/NOTIFICATIONS.en.md) | KI-Fortschritt, Aufgabenende, LAN-Erinnerung, sauberes Beenden |
 
 ## ⛔ Grenzen (bitte beachten)

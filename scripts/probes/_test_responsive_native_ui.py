@@ -83,6 +83,7 @@ SETTINGS_PAGES = [
     "UserPromptActivity.kt",
     "AsrAppActivity.kt",
     "VoiceServiceActivity.kt",
+    "pet/PetSettingsActivity.kt",
 ]
 
 # ---------------------------------------------------------------- orientation

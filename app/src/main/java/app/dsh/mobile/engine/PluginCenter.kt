@@ -65,6 +65,8 @@ object PluginCenter {
             "In-window conversation rewind with workspace file restore"),
         PluginInfo("pet", "dsh-pet",
             "Desktop pet: the blue fat fish that refuses to leave"),
+        PluginInfo("pet-bridge", "dsh-pet-bridge",
+            "Android pet bridge: push DSH turn/tool status to the system overlay"),
         PluginInfo("dream-skin", "dsh-dream-skin",
             "WebUI skins: 8 iOS / Linear style themes"),
         PluginInfo("skills-manager", "@michengai/dsh-skills-manager",

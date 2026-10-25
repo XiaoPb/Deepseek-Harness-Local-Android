@@ -84,7 +84,12 @@ class PluginStoreActivity : Activity() {
             override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
         })
 
-        doSearch("")
+        val initialQuery = intent.getStringExtra(EXTRA_QUERY).orEmpty().trim()
+        if (initialQuery.isNotBlank()) {
+            etSearch.setText(initialQuery)
+            etSearch.setSelection(initialQuery.length)
+        }
+        doSearch(initialQuery)
     }
 
     private fun dp(v: Int): Int = (v * dp).toInt()
@@ -367,7 +372,10 @@ class PluginStoreActivity : Activity() {
     }
 
     /** 平板/横屏下列表内容最大宽度（dp） */
-    private companion object {
+    companion object {
         const val STORE_CONTENT_MAX_WIDTH_DP = 900
+
+        /** 从桌宠设置页跳过来时预填搜索词，例如 dsh-pet-bridge。 */
+        const val EXTRA_QUERY = "app.dsh.mobile.extra.PLUGIN_QUERY"
     }
 }

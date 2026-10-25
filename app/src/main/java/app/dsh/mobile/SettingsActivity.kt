@@ -24,6 +24,9 @@ import app.dsh.mobile.engine.Privilege
 import app.dsh.mobile.engine.SelfCheck
 import app.dsh.mobile.engine.TtsManager
 import app.dsh.mobile.engine.LanWebProxy
+import app.dsh.mobile.pet.PetOverlayService
+import app.dsh.mobile.pet.PetPluginDetector
+import app.dsh.mobile.pet.PetSettingsActivity
 
 /**
  * 独立设置页（MIUI 分组卡片风格，替代原先的悬浮菜单）。
@@ -233,6 +236,11 @@ class SettingsActivity : Activity() {
         // —— 社区插件（v1.2.113）：一键安装 dsh 生态插件 ——
         findViewById<LinearLayout>(R.id.rowPlugin).setOnClickListener {
             startActivity(Intent(this, PluginStoreActivity::class.java))
+        }
+
+        // —— 桌宠悬浮窗（预留，插件驱动）：独立设置页负责权限/包/开关 ——
+        findViewById<LinearLayout>(R.id.rowPet).setOnClickListener {
+            startActivity(Intent(this, PetSettingsActivity::class.java))
         }
 
         // 自定义指令（v1.3.2，issue #19）：在 App 的环境说明之上补写用户自己的长期指令。
@@ -634,7 +642,33 @@ class SettingsActivity : Activity() {
         refreshNotifRow()
         refreshMicRow()
         refreshExt()
+        refreshPetRow()
         // 缩放副标题文案无需变；图标着色按打开时状态由静态 XML 决定
+    }
+
+    /** 扩展分组：桌宠入口状态（未装桥插件 / 已就绪 / 运行中 / 缺权限）。 */
+    private fun refreshPetRow() {
+        val v = findViewById<TextView>(R.id.valPet)
+        val plugin = PetPluginDetector.detect(this)
+        val running = PetOverlayService.isRunning()
+        val canDraw = Settings.canDrawOverlays(this)
+        val status = app.dsh.mobile.pet.PetStatusBus.state.value
+        val text = when {
+            !canDraw -> getString(R.string.pet_permission_denied)
+            running && status.connected -> getString(R.string.pet_status_connected)
+            running -> getString(R.string.pet_status_running)
+            !plugin.profileExists -> getString(R.string.pet_status_engine_down)
+            !plugin.bridgeReady -> getString(R.string.pet_plugin_missing)
+            else -> getString(R.string.pet_status_stopped)
+        }
+        v.text = text
+        v.setTextColor(
+            when {
+                running -> 0xFF6EE7B7.toInt()
+                !canDraw || !plugin.bridgeReady -> 0xFFFFB74D.toInt()
+                else -> 0xFF8A94A3.toInt()
+            },
+        )
     }
 
     /** 扩展中心入口：显示已激活扩展数（>0 变绿提示已并入引擎） */
