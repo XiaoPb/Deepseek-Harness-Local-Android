@@ -162,7 +162,7 @@ dsh-android-v1.4.18-x86_64-release.apk
 
 `publish-release` / `publish-edge` 都会调用
 [scripts/generate-release-notes.sh](../scripts/generate-release-notes.sh)，通过 `body_path`
-写入 Release 说明，不需要手写 `RELEASE_NOTES_*.md`：
+写入 Release 说明；手写的版本说明统一归档在 [docs/release-notes/](release-notes/)，不再放仓库根目录（CI 说明由脚本生成，不需要手写）：
 
 - **变更范围**：tag 发布取「上一个语义化版本 tag → 当前 tag」；edge 取 `edge → HEAD`；
   没有旧 tag 时取最近 30 个提交。
