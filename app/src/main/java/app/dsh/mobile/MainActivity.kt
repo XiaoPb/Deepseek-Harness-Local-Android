@@ -762,10 +762,24 @@ class MainActivity : Activity() {
         splashToggle?.setText(R.string.splash_show_steps)
         splashToggle?.setOnClickListener { toggleSplashSteps() }
         splashDetail?.text = ""
-        // 兜底：无论引擎/WebView 走哪条路径，45s 后强制收遮罩。宁可露出工具栏，
-        // 也不能让一张不透明的全屏 View 永久拦截触摸（issue #17 的教训）。
+        // 兜底：WebView 异常时强制收遮罩（issue #17）。但 noruntime 首启下载/解压
+        // 可能超过 45s —— 安装/启动期间不能收，否则用户会看到一块黑 WebView。
+        // 每 15s 续期，最多续 20 次（约 5 分钟）后仍强制收起。
         splashWatchdog?.let { v.removeCallbacks(it) }
-        val watchdog = Runnable { dismissSplash() }
+        var watchdogExtensions = 0
+        val watchdog = object : Runnable {
+            override fun run() {
+                val state = (application as DshApp).supervisor.state.value
+                val busy = state is EngineSupervisor.State.Installing ||
+                    state is EngineSupervisor.State.Starting
+                if (busy && watchdogExtensions < 20) {
+                    watchdogExtensions++
+                    v.postDelayed(this, 15_000L)
+                } else {
+                    dismissSplash()
+                }
+            }
+        }
         splashWatchdog = watchdog
         v.postDelayed(watchdog, 45_000L)
         // 秒表：每秒刷新"已用 N.Ns · 当前阶段"
