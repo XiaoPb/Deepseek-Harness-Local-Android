@@ -22,6 +22,7 @@ val updateRepo = (project.findProperty("updateRepo") as String?)
     ?: updateRepoDefault
 val repoConfigDir = layout.buildDirectory.dir("generated/repoConfig").get().asFile
 val runtimeAssetsDir = layout.buildDirectory.dir("generated/runtimeAssets").get().asFile
+val indexResDir = layout.buildDirectory.dir("generated/indexRes").get().asFile
 
 // CI 的 ubuntu runner 通常只有 python3；本地 Windows 只有 python。构建期脚本统一走这里。
 fun hasCommand(cmd: String): Boolean = runCatching {
@@ -84,6 +85,74 @@ val releaseKeyPassword = releaseSetting("DSH_RELEASE_KEY_PASSWORD", "keyPassword
     ?: releaseStorePassword
 val releaseSigningReady = releaseStorePassword != null && releaseKeystoreFile.isFile
 
+// ── 运行时索引验签公钥（构建期从正式 keystore 导出，不入库）──────────────
+// 索引用 APK 正式签名密钥签（见 publish-release），所以验签公钥必须来自同一把 key。
+// 这样 Fork 用各自的 keystore 自动得到各自的公钥，不需要提交/手工替换 PEM。
+// 无签名材料（PR / 本地无 keystore）时生成空文件：App 仍可回退到「自身签名证书」验签，
+// 但 debug 包无法验证 release 签名的索引（云更新入口会明确失败，不影响启动）。
+val indexPubKeyProp = (project.findProperty("indexPubKey") as String?)?.takeIf { it.isNotBlank() }
+
+fun extractPublicKeyPem(keystore: File, password: String, alias: String): String {
+    val certFile = File.createTempFile("dsh-index-cert", ".pem")
+    try {
+        val keytoolName = if (System.getProperty("os.name").lowercase().contains("win")) "keytool.exe" else "keytool"
+        val keytool = File(System.getProperty("java.home"), "bin/$keytoolName").absolutePath
+        val pb = ProcessBuilder(
+            keytool, "-exportcert", "-rfc",
+            "-alias", alias,
+            "-keystore", keystore.absolutePath,
+            "-storepass:env", "DSH_INDEX_STOREPASS",
+            "-file", certFile.absolutePath,
+        )
+        pb.environment()["DSH_INDEX_STOREPASS"] = password
+        pb.redirectErrorStream(true)
+        val p = pb.start()
+        val output = p.inputStream.bufferedReader().readText()
+        if (p.waitFor() != 0) throw GradleException("keytool exportcert failed: $output")
+        val cert = java.security.cert.CertificateFactory.getInstance("X.509")
+            .generateCertificate(certFile.inputStream())
+        val der = cert.publicKey.encoded
+        val b64 = java.util.Base64.getMimeEncoder(64, byteArrayOf('\n'.code.toByte())).encodeToString(der)
+        return "-----BEGIN PUBLIC KEY-----\n$b64\n-----END PUBLIC KEY-----\n"
+    } finally {
+        certFile.delete()
+    }
+}
+
+val generateIndexPubKey by tasks.registering {
+    val outFile = File(indexResDir, "raw/runtime_index_pub.pem")
+    val explicit = indexPubKeyProp?.let { rootProject.file(it) }
+    val keystore = releaseKeystoreFile
+    val password = releaseStorePassword
+    val alias = releaseKeyAlias
+    outputs.file(outFile)
+    outputs.upToDateWhen { false }
+    doLast {
+        outFile.parentFile.mkdirs()
+        val pem = when {
+            explicit != null && explicit.isFile -> explicit.readText()
+            keystore.isFile && !password.isNullOrBlank() -> try {
+                extractPublicKeyPem(keystore, password, alias)
+            } catch (e: Exception) {
+                logger.warn("index pubkey: cannot export from keystore: ${e.message}")
+                ""
+            }
+            else -> ""
+        }
+        outFile.writeText(pem)
+        if (pem.isBlank()) {
+            logger.lifecycle("index pubkey: none (cloud runtime updates disabled for this build)")
+        } else {
+            logger.lifecycle("index pubkey: generated from release keystore (${pem.length} bytes)")
+        }
+    }
+}
+tasks.named("preBuild") { dependsOn(generateIndexPubKey) }
+tasks.matching { it.name.startsWith("merge") && it.name.endsWith("Resources") }
+    .configureEach { dependsOn(generateIndexPubKey) }
+tasks.matching { it.name.startsWith("process") && it.name.endsWith("Resources") }
+    .configureEach { dependsOn(generateIndexPubKey) }
+
 android {
     namespace = "app.dsh.mobile"
     // CI 上 compileSdk=35；本地 SDK 只有 33/36/36.1 时可临时降/升到此值，
@@ -121,6 +190,8 @@ android {
     sourceSets.getByName("main").java.srcDir(repoConfigDir)
     // 构建期生成的 runtime/hardssh 资产（runtime.zip、runtime/MANIFEST.json、hardssh/）
     sourceSets.getByName("main").assets.srcDir(runtimeAssetsDir)
+    // 构建期从正式 keystore 导出的索引验签公钥
+    sourceSets.getByName("main").res.srcDir(indexResDir)
 
     // 正式签名在材料齐全时启用；缺失时保持 unsigned（不阻断 debug/PR 构建）。
     signingConfigs {

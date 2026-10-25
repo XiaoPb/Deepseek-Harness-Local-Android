@@ -2175,7 +2175,7 @@ URL: https://github.com/Soodok/Deepseek-Harness-Local-Android/releases/tag/v1.4.
 - 生成式 assets：`app/build.gradle.kts` 的 `prepareRuntimeAssets` 写 `build/generated/runtimeAssets/`；参数 `-Ppackage=full|noruntime`、`-PruntimeZip`、`-PhardsshDir`、`-PruntimeUrlBase`；不再改工作树。
 - MANIFEST schema v2：runtime urls 直连 + `gh-proxy.org`、hardssh 元数据、`updates.indexUrl`。
 - 云端索引：tag Release 内 `runtime-index.json` + `.sig`；App 从 `releases/latest/download/runtime-index.json` 读取并验签。**不新增 runtime 渠道**。
-- 索引签名复用 APK 正式 keystore：CI 从 `RELEASE_KEYSTORE_BASE64` 解 PKCS12 取私钥（RSA/SHA256withRSA），App 内置证书公钥验签；不新增 secret。
+- 索引签名复用 APK 正式 keystore：CI 从 `RELEASE_KEYSTORE_BASE64` 解 PKCS12 取私钥（RSA/SHA256withRSA），App 验签公钥由 `generateIndexPubKey` 在构建期从同一 keystore 导出（**不提交 PEM**），并回退到 APK 自身签名证书；不新增 secret。
 - Fork 自动更新链接：`scripts/apply-fork-links.py` 在构建期把模板里的 `Soodok/Deepseek-Harness-Local-Android` 替换为 `<owner>/Deepseek-Harness-Local-Android`，生成 `RepoConfig.kt`；Soodok 原样不动。
 - 安装健壮性：`HttpDownloader`（续传/URL 回退/sha）+ `engine.staging` 校验后换名、失败从 `engine.old` 回滚；空间预算按旧 + staging + zip 峰值。
 
