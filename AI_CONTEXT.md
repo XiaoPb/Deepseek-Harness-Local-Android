@@ -5,7 +5,24 @@
   README 体积修正 + CI 刷包修复。versionCode 270。
 - issue #42/#43/#44/#47 已通知报告人验证。
 
-## v1.4.19 待发（桌宠悬浮窗预留：插件驱动、不打包插件/素材）
+
+## v1.4.20 合并（2026-10-25，main → dev → main）
+- 分叉点 `f613583`：main 侧 7 个提交（v1.4.19 发布线：polyfill v4、release job 降级、版本 269），
+  dev 侧 2 个提交（桌宠悬浮窗预留、CI fork 开关 + dsh-hardssh 0.2.13）。冲突仅 2 处：
+  本文件与 `.github/workflows/android-build.yml`（release job 的 if）。
+- **发布语义（本仓库，固定）**：
+  - 正式版：只接受严格 tag `v<major>.<minor>.<patch>`（如 `v1.4.20`），push tag → `publish-release`；
+    **禁止 `v*.*.*-*`**（如 `v1.4.18-380`）——CI 首个 job 校验失败，不会发版。
+  - 预览版：每日 03:00 `schedule` → `publish-preview`，双架构 debug 包发到滚动 prerelease `preview`，
+    覆盖同名资产并清理旧文件名，只保留最新一版。
+  - edge：push `main` → `publish-edge`（debug + release，滚动 `edge`）。
+- 刷包根因记录：旧 release job 每次 push/定时新建 `v<ver>-<run>` Release，该 tag 又命中
+  `on.push.tags: v*` 触发下一轮构建 → 自激刷包（v1.4.18-380/381/382/384）。现在预览固定用
+  tag `preview`，工作流不再创建任何 `v*` tag。
+- 合并后 `versionCode 269 / versionName 1.4.19`（v1.4.19 已发布），下次正式发版 `270 / 1.4.20`。
+
+
+## v1.4.21 待发（桌宠悬浮窗预留：插件驱动、不打包插件/素材）
 - **需求**：预留系统悬浮桌宠；用户自行安装 dsh 插件后开启；不改 dsh-pet 本体。
 - **生态事实修正**：真正可用的是 `dsh-pet-bridge@0.1.0`（cc-pet HookServer 协议），
   五字段是 `kind/agent_source/tool_name/tool_input/caller_pid`，**没有 bubble 文本**；

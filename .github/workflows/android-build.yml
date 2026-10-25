@@ -15,7 +15,8 @@ name: android-build
 # 注意：collect-runtime 脚本包名已对照 Termux Packages 索引核实过。
 # ⚠️ Fork 本仓库后 GitHub 会把本 workflow 置为 disabled_fork：
 #    需在 Actions → android-build 页面点一次 “Enable workflow” 才会运行。
-# 触发一览：push(任意分支/tag v*) · pull_request(任意目标分支) · 每日 01:30 Asia/Shanghai · 手动 dispatch
+# 触发一览：push(任意分支/tag v*) · pull_request(任意目标分支) · 每日 03:00 Asia/Shanghai · 手动 dispatch
+# tag 只认严格 v<major>.<minor>.<patch>（禁止 v*.*.*-*）；预览版走每日定时的 preview。
 
 on:
   push:
@@ -23,7 +24,7 @@ on:
     tags: ["v*"]
   pull_request:
   schedule:
-    - cron: "30 17 * * *"   #  nightly · 01:30 Asia/Shanghai
+    - cron: "0 19 * * *"    # preview 预览版 · 每日 03:00 Asia/Shanghai
   workflow_dispatch:
 
 env:
@@ -58,6 +59,15 @@ jobs:
   build-hardssh-plugin:
     runs-on: ubuntu-24.04
     steps:
+      - name: 校验 tag 格式（正式版只允许严格 v<major>.<minor>.<patch>）
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          set -euo pipefail
+          if ! printf '%s' "$GITHUB_REF_NAME" | grep -Eqx 'v[0-9]+\.[0-9]+\.[0-9]+'; then
+            echo "::error::非法 tag '$GITHUB_REF_NAME'：正式版只允许严格的 v<major>.<minor>.<patch>，禁止 v*.*.*-*；预览版由每日定时发布到 preview。"
+            exit 1
+          fi
+
       - name: 检出本仓库（打包脚本）
         uses: actions/checkout@v4
 
@@ -361,26 +371,21 @@ jobs:
   #
   # —— 自动发布策略：默认仅上游 Soodok 仓库自动发布；Fork 需在仓库 Variables
   #    新建 ENABLE_CI_IN_FORK=true，debug 自动构建产物才会进本 Fork 的 Releases
-  #    （见下方 release job）。上游仓库仍按上述人工两步走。
+  #    （见下方 publish-preview）。上游仓库仍按上述人工两步走。
 
-  # ---- 自动发布（v1.2.120）：main 构建成功后，双架构 APK 落到 Releases ----
-  # 触发条件：push / dispatch / 定时，且 build-apk 成功；PR 不发（Fork 的
-  # GITHUB_TOKEN 在 PR 上下文无写权限）。
-  # ⚠️ 仅上游仓库默认自动发布：上游的人工发布流程（release 签名 + 人工两步）不可被
-  #    自动流程替代 —— CI 产物是 debug 签名，发到上游会让用户下到无法覆盖升级的包。
-  #    Fork 用户若想自己编译并发布，在仓库 Variables 新建 ENABLE_CI_IN_FORK=true 即可。
-  # 版本：app/build.gradle.kts 的 versionName + 本次 run_number，保证每个成功
-  # 的构建版本号唯一（tag = v<versionName>-<run_number>），互不覆盖。
-  release:
-    # v1.4.19 修复：此 job 是上游 fork 的「debug 签名自动分发渠道」——每次 push
-    # main 都新建一个 v<ver>-<run_number> 的 Release，在本仓库把 Releases 页面
-    # 刷成了连续的重复包（v1.4.18-380/381/382/384）。本仓库的发布语义是：
-    # tag v* → publish-release（正式签名）；main push → publish-edge（单个滚动
-    # prerelease）。此 job 降级为仅手动触发，需要测试分发时在 Actions 页面跑。
+  # ---- 预览版（每日定时）：双架构 debug 包发到滚动 prerelease "preview" ----
+  # v1.4.20 发布语义（本仓库固定）：
+  #   正式版 → 只接受严格 tag v<major>.<minor>.<patch>（publish-release；禁止 v*.*.*-*）；
+  #   main push → publish-edge（滚动 edge，debug + release）；
+  #   每日 03:00 schedule → 本 job（滚动 preview，debug 双架构，只保留最新一版）。
+  # 历史根因：旧 release job 每次 push/定时都新建 v<ver>-<run_number> Release，而该 tag
+  #   又命中 on.push.tags: v* 触发下一轮构建 —— 自激刷包（v1.4.18-380/381/382/384）。
+  #   现在固定用 tag "preview"，工作流不再创建任何 v* tag。
+  publish-preview:
     if: >-
       (github.repository == 'Soodok/Deepseek-Harness-Local-Android' ||
        vars.ENABLE_CI_IN_FORK == 'true')
-      && github.event_name == 'workflow_dispatch'
+      && github.event_name == 'schedule'
       && needs.build-apk.result == 'success'
     needs: [build-apk]
     runs-on: ubuntu-24.04
@@ -415,7 +420,7 @@ jobs:
           files: apk/*.apk
           generate_release_notes: true
           body: |
-            自动构建：v${{ steps.ver.outputs.version }} (versionCode ${{ steps.ver.outputs.versionCode }}) · build ${{ github.run_number }}
+            每日定时（03:00）预览构建：v${{ steps.ver.outputs.version }} (versionCode ${{ steps.ver.outputs.versionCode }}) · build ${{ github.run_number }}
 
             架构：arm64-v8a（真机）+ x86_64（模拟器）
             签名：debug（此 Fork 的自动分发渠道）
@@ -423,6 +428,32 @@ jobs:
             - 已通过：运行时闭包校验（含内置 SSH 插件）、so 16KB 页对齐、APK ABI 校验、i18n 一致性
             - 安装注意：与 release 签名包签名不同，不能互相覆盖安装
 
+            - 已通过：运行时闭包校验（含内置 SSH 插件）、so 16KB 页对齐、APK ABI 校验
+            - 正式版只认严格 tag v<major>.<minor>.<patch> 触发的 Release
+
+      - name: 清理旧文件名的资产（只保留最新一版）
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: preview
+        run: |
+          set -euo pipefail
+          API_BASE_URL="https://api.github.com/repos/${GITHUB_REPOSITORY}"
+          RELEASE_ID=$(curl -fsS -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "${API_BASE_URL}/releases/tags/${TAG_NAME}" | jq -r '.id')
+          ASSETS=$(curl -fsS -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "${API_BASE_URL}/releases/${RELEASE_ID}/assets?per_page=100" \
+            | jq -r '.[] | [.id, .name] | @tsv')
+          while IFS=$'\t' read -r asset_id asset_name; do
+            [ -z "$asset_id" ] && continue
+            if [ ! -f "apk/$asset_name" ]; then
+              echo "remove stale asset: $asset_name (id=$asset_id)"
+              curl -fsS -X DELETE -H "Authorization: Bearer $GH_TOKEN" \
+                -H "Accept: application/vnd.github+json" \
+                "${API_BASE_URL}/releases/assets/${asset_id}" >/dev/null
+            fi
+          done <<< "$ASSETS"
   # ---------------------------------------------------------------------------
   # 正式发布（v1.4.18）：tag v* 触发，发布 debug + release 两个变体。
   # 前置：仓库 Secrets 已配置 RELEASE_*（见 docs/RELEASE.md）；build-apk 里 tag
