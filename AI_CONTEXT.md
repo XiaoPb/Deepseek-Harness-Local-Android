@@ -2221,3 +2221,13 @@ URL: https://github.com/Soodok/Deepseek-Harness-Local-Android/releases/tag/v1.4.
 - 索引签名本地模拟：真实 `dsh-release.keystore` → PKCS12 取私钥 → RSA 签名 → 证书公钥验签 OK。
 - 未验证：`publish-edge` / `publish-preview` / `publish-release` 的实际 GitHub Release 上传（dev push 上按设计跳过）。
 
+### v1.4.19 发布与真机验证（2026-10-25）
+- tag `v1.4.19`（commit `718109c`，在 dev 分支上）CI 全绿，`publish-release` 成功。
+- Release 共 12 个资产：8 APK（full 146–147 MB / noruntime 22–24 MB）+ 2 runtime zip（127 MB）+ `runtime-index.json` + `.sig`。
+- 用正式 keystore 证书公钥验签 index → OK；`runtime-arm64-v8a.zip` 实测 sha256 `ea2f4b57…`、大小 133,687,953，与 index/manifest 一致。
+- MuMu（x86_64, Android 12）：
+  - 原安装包为 **debug 签名**（`CN=Android Debug`, `36f752cb…`），与 release 证书 `ea844b60…` 不同；卸载旧包后安装 `x86_64-release-noruntime.apk`。
+  - 首启出现“需要下载运行时 / 127 MB / 下载完整包 / 稍后 / 下载并启动”确认框。
+  - 点击下载后走 GitHub 直连成功（133,199,450 bytes，约 70s），`RuntimeInstaller` 解压 6 个顶层目录，`HardsshInstaller` 安装 `@xiaopb/dsh-hardssh@0.2.13`，引擎 Healthy，左侧栏出现「SSH 工作区」。
+- 尚未验证：SSH 实际连接、关于页运行时更新、full 包离线安装、gh-proxy 回退（本次直连成功未触发）。
+
