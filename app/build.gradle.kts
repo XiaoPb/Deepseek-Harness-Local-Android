@@ -273,7 +273,8 @@ fun inferredRuntimeUrlBase(): String {
     return when {
         refType == "tag" && !refName.isNullOrBlank() ->
             "https://github.com/$updateRepo/releases/download/$refName"
-        !refName.isNullOrBlank() && refName == "main" ->
+        !refName.isNullOrBlank() ->
+            // main / 分支 / PR：指向 latest 稳定运行时；分支包只用于测试，不影响正式渠道。
             "https://github.com/$updateRepo/releases/latest/download"
         else -> ""
     }
