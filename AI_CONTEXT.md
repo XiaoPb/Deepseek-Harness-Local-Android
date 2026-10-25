@@ -21,6 +21,7 @@
   `on.push.tags: v*` 触发下一轮构建 → 自激刷包（v1.4.18-380/381/382/384）。现在预览固定用
   tag `preview`，工作流不再创建任何 `v*` tag。
 - 合并后 `versionCode 269 / versionName 1.4.19`（v1.4.19 已发布），下次正式发版 `270 / 1.4.20`。
+- 仓库整理：根目录 20 个 `RELEASE_NOTES_v1.*.*.md` 移入 `docs/release-notes/`，README 三语已加归档链接。
 
 
 ## v1.4.21 待发（桌宠悬浮窗预留：插件驱动、不打包插件/素材）
@@ -1511,7 +1512,7 @@ const rightbar = rightbar === 0 || available < 300 ? 0 : Math.min(available, …
 2. `gradle assembleRelease -Pabi=arm64-v8a` → `apksigner sign --ks keystore/dsh-release.keystore …`；
 3. `gradle assembleDebug -Pabi=arm64-v8a`（Release 按惯例带 debug 包）；
 4. 分片 push（10MB）+ `pm install -r` 真机验证；
-5. `git add app/ README*.md RELEASE_NOTES*.md AI_CONTEXT.md`（**不要 `git add -A scripts/`**，
+5. `git add app/ README*.md docs/release-notes/*.md AI_CONTEXT.md`（**不要 `git add -A scripts/`**，
    probes 里有凭证/大文件）；`git push`（需 token，网络不稳时重试）；
 6. GitHub API 建 release + `uploads.github.com` 传两个 APK（144MB 约 30s/个）。
 

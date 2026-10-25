@@ -106,6 +106,7 @@ Zu jeder Fähigkeit gibt es ein eigenes Dokument (Design-Abwägungen, Messwerte,
 | [Spracheingabe](docs/VOICE_INPUT.en.md) | zwei Erkennungskanäle, Sende-Deduplizierung, Panel-Parking, bekanntes Problem |
 | [Desktop-Pet-Overlay](docs/PET_OVERLAY.md) | reserviertes, plugin-gesteuertes Pet: dsh-pet-bridge, Fünf-Feld-Protokoll, Paketimport und Lizenz |
 | [Benachrichtigungen & Hintergrund](docs/NOTIFICATIONS.en.md) | KI-Fortschritt, Aufgabenende, LAN-Erinnerung, sauberes Beenden |
+| [Versionshinweise (Archiv)](docs/release-notes/) | `RELEASE_NOTES_*.md` je Version (ab v1.3.0) außerhalb des Repo-Roots archiviert |
 
 ## ⛔ Grenzen (bitte beachten)
 

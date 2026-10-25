@@ -120,6 +120,7 @@ Every capability has its own document (design trade-offs, measured numbers, trou
 | [Notifications & background](docs/NOTIFICATIONS.en.md) | AI progress, task completion, LAN reminder, clean exit |
 | [Complex-scenario field notes](docs/COMPLEX_SCENARIOS.md) | noisy pages, cross-app tasks, failure recovery, measured |
 | [Fast-path picker](docs/FAST_PATH_PICKER.md) | on-device UI element selection and discrimination |
+| [Release notes archive](docs/release-notes/) | per-release `RELEASE_NOTES_*.md` (v1.3.0+) kept out of the repo root |
 
 ## ⛔ Limits (please be aware)
 
