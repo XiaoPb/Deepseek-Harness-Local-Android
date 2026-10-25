@@ -126,94 +126,120 @@
         android:layout_height="match_parent"
         android:orientation="vertical"
         android:gravity="center"
-        android:background="#FF101418"
+        android:background="@drawable/splash_bg"
         android:elevation="30dp"
         android:clickable="true"
         android:focusable="true">
 
-        <ImageView
-            android:id="@+id/splashLogo"
-            android:layout_width="104dp"
-            android:layout_height="104dp"
-            android:src="@drawable/ic_launcher"
-            android:contentDescription="@string/app_name" />
-
-        <TextView
-            android:layout_width="wrap_content"
+        <LinearLayout
+            android:layout_width="340dp"
             android:layout_height="wrap_content"
-            android:layout_marginTop="18dp"
-            android:text="@string/app_name"
-            android:textColor="#FFF2F5F9"
-            android:textSize="22sp"
-            android:textStyle="bold"
-            android:letterSpacing="0.02" />
+            android:orientation="vertical"
+            android:gravity="center_horizontal"
+            android:paddingLeft="28dp"
+            android:paddingRight="28dp"
+            android:paddingTop="28dp"
+            android:paddingBottom="22dp"
+            android:background="@drawable/splash_card">
 
-        <TextView
-            android:id="@+id/splashStatus"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
-            android:text="@string/splash_preparing"
-            android:textColor="#FF9CA3AF"
-            android:textSize="13sp" />
+            <ImageView
+                android:id="@+id/splashLogo"
+                android:layout_width="92dp"
+                android:layout_height="92dp"
+                android:padding="18dp"
+                android:src="@drawable/ic_launcher"
+                android:background="@drawable/splash_logo_bg"
+                android:contentDescription="@string/app_name" />
 
-        <!-- v1.4.8：已用秒数 + 当前阶段名。之前只有一句「正在启动」，用户无法判断
-             是在推进还是卡死（手表上 12s 与 40s 的观感完全一样）。 -->
-        <TextView
-            android:id="@+id/splashElapsed"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:textColor="#FF7DD3FC"
-            android:textSize="12sp"
-            android:fontFamily="monospace"
-            tools:text="3.2s" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:text="@string/app_name"
+                android:textColor="#FFF8FAFC"
+                android:textSize="21sp"
+                android:textStyle="bold"
+                android:letterSpacing="0.02" />
 
-        <ProgressBar
-            android:id="@+id/splashProgress"
-            style="?android:attr/progressBarStyleHorizontal"
-            android:layout_width="180dp"
-            android:layout_height="3dp"
-            android:layout_marginTop="18dp"
-            android:indeterminate="true"
-            android:progressTint="#FF7DD3FC"
-            android:progressBackgroundTint="#26FFFFFF" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="@string/splash_tagline"
+                android:textColor="#FF8A94A3"
+                android:textSize="11sp" />
 
-        <!-- v1.4.8：文件加载明细（解压阶段显示 M/N 个文件） -->
-        <TextView
-            android:id="@+id/splashDetail"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
-            android:textColor="#FF6B7684"
-            android:textSize="11sp"
-            android:fontFamily="monospace"
-            android:gravity="center"
-            tools:text="48,203 / 50,405 files" />
+            <TextView
+                android:id="@+id/splashStatus"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="22dp"
+                android:text="@string/splash_preparing"
+                android:textColor="#FFF1F5F9"
+                android:textSize="15sp"
+                android:textStyle="bold" />
 
-        <!-- 展开/收起完整阶段列表。遮罩本身吞触摸，点这里不会穿透到底下界面。 -->
-        <TextView
-            android:id="@+id/splashToggle"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="14dp"
-            android:paddingLeft="12dp"
-            android:paddingRight="12dp"
-            android:paddingTop="6dp"
-            android:paddingBottom="6dp"
-            android:text="@string/splash_show_steps"
-            android:textColor="#FF5A9FD4"
-            android:textSize="11sp"
-            android:background="#14FFFFFF" />
+            <TextView
+                android:id="@+id/splashElapsed"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:textColor="#FF7DD3FC"
+                android:textSize="12sp"
+                android:fontFamily="monospace"
+                tools:text="3.2s" />
 
-        <!-- 阶段列表：默认收起；展开时用 layout_weight 占满剩余空间并可滚动，
-             这样阶段很多时也不会把上方的 logo 顶出屏幕。 -->
+            <ProgressBar
+                android:id="@+id/splashProgress"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="240dp"
+                android:layout_height="6dp"
+                android:layout_marginTop="18dp"
+                android:indeterminate="true"
+                android:progressTint="#FF7DD3FC"
+                android:progressBackgroundTint="#26FFFFFF" />
+
+            <TextView
+                android:id="@+id/splashDetail"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:textColor="#FF94A3B8"
+                android:textSize="11sp"
+                android:fontFamily="monospace"
+                android:gravity="center"
+                tools:text="48,203 / 50,405 files" />
+
+            <TextView
+                android:id="@+id/splashToggle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:paddingLeft="14dp"
+                android:paddingRight="14dp"
+                android:paddingTop="7dp"
+                android:paddingBottom="7dp"
+                android:text="@string/splash_show_steps"
+                android:textColor="#FF7DD3FC"
+                android:textSize="11sp"
+                android:background="@drawable/splash_pill" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:text="@string/splash_hint"
+                android:textColor="#FF5A6472"
+                android:textSize="11sp"
+                android:gravity="center" />
+        </LinearLayout>
+
         <ScrollView
             android:id="@+id/splashStepsScroll"
-            android:layout_width="match_parent"
+            android:layout_width="340dp"
             android:layout_height="0dp"
             android:layout_weight="1"
-            android:layout_marginTop="10dp"
+            android:layout_marginTop="12dp"
             android:visibility="gone"
             android:scrollbars="vertical">
 
@@ -221,22 +247,13 @@
                 android:id="@+id/splashSteps"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:paddingLeft="28dp"
-                android:paddingRight="28dp"
+                android:paddingLeft="20dp"
+                android:paddingRight="20dp"
                 android:paddingBottom="12dp"
                 android:textColor="#FF8A94A3"
                 android:textSize="11sp"
                 android:fontFamily="monospace"
                 android:lineSpacingExtra="3dp" />
         </ScrollView>
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="18dp"
-            android:text="@string/splash_hint"
-            android:textColor="#FF5A6472"
-            android:textSize="11sp"
-            android:gravity="center" />
     </LinearLayout>
 </FrameLayout>
