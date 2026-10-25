@@ -606,6 +606,6 @@ You can still continue without updating, but the interface will not display.</st
     <string name="about_runtime_latest">Runtime is up to date</string>
     <string name="about_runtime_failed">Runtime check failed: %1$s</string>
     <string name="about_runtime_installing">Installing runtime… %1$d%%</string>
-    <string name="about_runtime_installed">Runtime installed — restart the engine to use it</string>
+    <string name="about_runtime_installed">Runtime installed — restarting the engine</string>
     <string name="about_runtime_no_pin">Signed runtime index unavailable</string>
 </resources>

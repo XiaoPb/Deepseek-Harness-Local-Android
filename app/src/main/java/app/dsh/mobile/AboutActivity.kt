@@ -116,6 +116,9 @@ class AboutActivity : Activity() {
         tv.setTextColor(0xFF7DD3FC.toInt())
         pendingRuntime = null
         Thread({
+            // 运行中的引擎会持续读 engine/lib；先停引擎再替换运行时，成功后自动重启。
+            val app = application as DshApp
+            runCatching { app.supervisor.stop(graceMs = 3_500) }
             try {
                 RuntimeInstaller(this).installFromIndex(
                     entry = entry,
@@ -140,6 +143,8 @@ class AboutActivity : Activity() {
                     )
                     tv.setTextColor(0xFFF87171.toInt())
                 }
+            } finally {
+                runCatching { app.supervisor.restart() }
             }
         }, "runtime-install").apply { isDaemon = true; start() }
     }

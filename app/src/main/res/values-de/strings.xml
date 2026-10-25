@@ -615,6 +615,6 @@ Sie können auch ohne Update fortfahren, die Oberfläche wird dann aber nicht an
     <string name="about_runtime_latest">Runtime ist aktuell</string>
     <string name="about_runtime_failed">Runtime-Prüfung fehlgeschlagen: %1$s</string>
     <string name="about_runtime_installing">Runtime wird installiert… %1$d%%</string>
-    <string name="about_runtime_installed">Runtime installiert – Engine neu starten</string>
+    <string name="about_runtime_installed">Runtime installiert – Engine wird neu gestartet</string>
     <string name="about_runtime_no_pin">Signierter Runtime-Index nicht verfügbar</string>
 </resources>
