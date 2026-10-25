@@ -2205,3 +2205,8 @@ URL: https://github.com/Soodok/Deepseek-Harness-Local-Android/releases/tag/v1.4.
   - 点击下载后走 GitHub 直连成功（133,199,450 bytes，约 70s），`RuntimeInstaller` 解压 6 个顶层目录，`HardsshInstaller` 安装 `@xiaopb/dsh-hardssh@0.2.13`，引擎 Healthy，左侧栏出现「SSH 工作区」。
 - 尚未验证：SSH 实际连接、关于页运行时更新、full 包离线安装、gh-proxy 回退（本次直连成功未触发）。
 
+### 追加验证（同日）
+- **gh-proxy 可用性**：通过 `https://gh-proxy.org/https://github.com/...` 下载 x86_64 完整包（146.1 MB）成功，`verify-apk-assets` 通过。
+- **full → noruntime 覆盖**：同一 release 签名下 `adb install -r` 完整包覆盖 noruntime 成功；App 复用已下载运行时，引擎 Healthy，SSH 工作区入口仍在。
+- MuMu 侧最终状态：v1.4.19 完整包 + 已下载 `runtime-x86_64` + hardssh 0.2.13；未清除用户数据。
+
