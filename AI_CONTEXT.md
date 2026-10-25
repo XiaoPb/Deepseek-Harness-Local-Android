@@ -2231,6 +2231,13 @@ URL: https://github.com/Soodok/Deepseek-Harness-Local-Android/releases/tag/v1.4.
   - 点击下载后走 GitHub 直连成功（133,199,450 bytes，约 70s），`RuntimeInstaller` 解压 6 个顶层目录，`HardsshInstaller` 安装 `@xiaopb/dsh-hardssh@0.2.13`，引擎 Healthy，左侧栏出现「SSH 工作区」。
 - 尚未验证：SSH 实际连接、关于页运行时更新、full 包离线安装、gh-proxy 回退（本次直连成功未触发）。
 
+### v1.4.20 运行时 UX 修复（2026-10-25）
+- MuMu 首次安装 noruntime 暴露两个问题：下载阶段进度条不显示；下载超过 45s 时启动遮罩被 watchdog 收起，露出黑 WebView。
+- 修复：`RuntimeInstaller` 在下载阶段发布 `DOWNLOADING` + 字节进度（下载占 45%，解压占 55%）；启动遮罩在 `Installing/Starting` 期间每 15s 续期（最多 5 分钟），不再中途收起；遮罩重做为渐变 + 卡片 + 品牌 tagline。
+- 修复 ABI 选择：`AboutActivity`/`RuntimeInstaller`/`SelfCheck` 改用 `Build.SUPPORTED_ABIS.first()`，避免 MuMu 等带 arm 转译的 x86 设备误选 arm64 运行时（表现为 `bundled e_machine=183, device expects 62`）。
+- 关于页在已安装时显示“运行时 <version> 已是最新”，不再显示“可用，点击安装”。
+- v1.4.20 版本号升至 270/1.4.20；MuMu 实测：首启 1:09 时仍显示下载卡片（112/127MB），完成后引擎 Healthy；关于页显示 x86_64 版本已是最新。
+
 ### 追加验证（同日）
 - **gh-proxy 可用性**：通过 `https://gh-proxy.org/https://github.com/...` 下载 x86_64 完整包（146.1 MB）成功，`verify-apk-assets` 通过。
 - **full → noruntime 覆盖**：同一 release 签名下 `adb install -r` 完整包覆盖 noruntime 成功；App 复用已下载运行时，引擎 Healthy，SSH 工作区入口仍在。
