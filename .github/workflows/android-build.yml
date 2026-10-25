@@ -24,10 +24,15 @@ on:
     tags: ["v*"]
   pull_request:
   schedule:
-    - cron: "30 17 * * *"   # preview 预览版 · 每日 01:30 Asia/Shanghai
+    # GitHub Actions 的 cron 固定按 UTC 解析，没有时区字段：
+    # 17:30 UTC = 次日 01:30 Asia/Shanghai（UTC+8）——要改北京时间，改这里的 UTC 值。
+    - cron: "30 17 * * *"   # 每日 01:30 Asia/Shanghai（= UTC 17:30）
   workflow_dispatch:
 
 env:
+  # 时区统一为 Asia/Shanghai（GitHub 的 schedule 只能写 UTC，换算见上面 cron 注释；
+  # 这里只影响步骤内 date 等本地时间，发布说明脚本用的是 date -u，不受影响）。
+  TZ: Asia/Shanghai
   # 内置 SSH 远程工作区插件：源码不在本仓库，构建时从 GitHub 按固定提交拉取。
   # 升级插件 = 改 HARDSSH_REF（commit SHA 最稳；也接受 tag/分支），其余步骤不用动。
   # 2026-10-25：v0.2.13（fork 包名 @xiaopb/dsh-hardssh）—— 修复空 commandPolicy
