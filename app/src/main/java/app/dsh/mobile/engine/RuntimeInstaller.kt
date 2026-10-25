@@ -7,7 +7,6 @@ import android.os.Build
 import android.util.Log
 import org.json.JSONObject
 import java.io.File
-import java.nio.file.Files
 import java.security.MessageDigest
 import java.util.zip.ZipInputStream
 
@@ -115,6 +114,10 @@ class RuntimeInstaller(private val ctx: Context) {
                 manifest.packageName == "noruntime" -> true
                 // 完整包：包内版本更新时本地重装（无下载）。
                 !manifest.runtime.bundled -> true
+                // 已通过云端更新到比包内更新的运行时：不要被旧 APK 降级。
+                installed != null && installed.builtAt > 0 &&
+                    manifest.runtime.builtAt > 0 &&
+                    installed.builtAt > manifest.runtime.builtAt -> true
                 manifest.runtime.version.isBlank() || manifest.runtime.version == "unknown" -> true
                 installed != null -> installed.version == manifest.runtime.version
                 else -> runCatching { stampFile.readText().trim() == manifest.runtime.version }
@@ -151,7 +154,7 @@ class RuntimeInstaller(private val ctx: Context) {
         check(!installing) { "runtime install already in progress" }
         val info = RuntimeInfo(
             version = entry.version,
-            builtAt = 0L,
+            builtAt = entry.builtAt,
             bundled = false,
             url = entry.urls.firstOrNull(),
             urls = entry.urls,

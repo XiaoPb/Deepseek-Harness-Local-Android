@@ -26,6 +26,7 @@ object RuntimeIndexClient {
 
     data class Entry(
         val version: String,
+        val builtAt: Long,
         val sha256: String,
         val size: Long,
         val unpackedBytes: Long,
@@ -78,6 +79,7 @@ object RuntimeIndexClient {
                 }
                 val entry = Entry(
                     version = obj.optString("version"),
+                    builtAt = obj.optLong("builtAt", 0L),
                     sha256 = obj.optString("sha256"),
                     size = obj.optLong("size", 0L),
                     unpackedBytes = obj.optLong("unpackedBytes", 0L),
