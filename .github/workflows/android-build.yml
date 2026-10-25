@@ -340,6 +340,16 @@ jobs:
             cp app/build/outputs/apk/release/app-release.apk "dist/${BASE}-release${SUFFIX}.apk"
           fi
 
+      - name: 校验 APK 资产形态（${{ matrix.package }} / ${{ matrix.abi }}）
+        run: |
+          set -euo pipefail
+          python3 scripts/verify-apk-assets.py "$APK_DEBUG" \
+            --expect-package ${{ matrix.package }} --expect-abi ${{ matrix.abi }}
+          if [ -f "$APK_RELEASE" ]; then
+            python3 scripts/verify-apk-assets.py "$APK_RELEASE" \
+              --expect-package ${{ matrix.package }} --expect-abi ${{ matrix.abi }}
+          fi
+
       - name: 校验 release 签名（${{ matrix.abi }}）
         if: env.RELEASE_STORE_PASSWORD != ''
         run: |

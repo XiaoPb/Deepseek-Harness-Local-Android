@@ -48,12 +48,8 @@ verify_zip() {
   local tmp
   tmp="$(mktemp -d)"
   trap 'rm -rf "$tmp"' RETURN
-  python3 - "$zip" "$tmp" <<'PY'
-import sys, zipfile
-zip_path, out = sys.argv[1], sys.argv[2]
-with zipfile.ZipFile(zip_path) as z:
-    z.extractall(out)
-PY
+  # 必须用 unzip（Info-ZIP）恢复 zip 里的 Unix 权限位；Python extractall 会丢可执行位。
+  unzip -q "$zip" -d "$tmp"
 
   test -x "$tmp/bin/bash" || { echo "错误：缺少 bin/bash" >&2; return 1; }
   test -x "$tmp/bin/rg" || { echo "错误：缺少 bin/rg" >&2; return 1; }
