@@ -551,17 +551,28 @@ jobs:
 
       - name: 生成并签名 runtime-index.json
         env:
-          RUNTIME_INDEX_SIGNING_KEY: ${{ secrets.RUNTIME_INDEX_SIGNING_KEY }}
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+          RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
           RUNTIME_INDEX_KEY_ID: ${{ vars.RUNTIME_INDEX_KEY_ID }}
         run: |
           set -euo pipefail
-          test -n "$RUNTIME_INDEX_SIGNING_KEY" || {
-            echo "::error::缺少 RUNTIME_INDEX_SIGNING_KEY secret（见 docs/RELEASE.md）"; exit 1; }
+          test -n "$RELEASE_KEYSTORE_BASE64" || {
+            echo "::error::缺少 RELEASE_KEYSTORE_BASE64（索引复用 APK 正式签名密钥）"; exit 1; }
+          KS=/tmp/dsh-release.keystore
           KEY=/tmp/runtime-index-signing-key.pem
-          printf '%s' "$RUNTIME_INDEX_SIGNING_KEY" | base64 -d > "$KEY"
+          printf '%s' "$RELEASE_KEYSTORE_BASE64" | base64 -d > "$KS"
+          chmod 600 "$KS"
+          # 从 PKCS12 中取出正式签名私钥（RSA-4096），只用于本次索引签名，结束即删。
+          # 该 keystore 只有一个私钥 alias（dsh-release）；-name 在非 -export 模式下会被忽略。
+          if ! openssl pkcs12 -in "$KS" -nocerts -nodes \
+              -passin pass:"$RELEASE_STORE_PASSWORD" -out "$KEY" 2>/dev/null; then
+            # 老 keystore 可能使用 legacy 算法（RC2/3DES）
+            openssl pkcs12 -legacy -in "$KS" -nocerts -nodes \
+              -passin pass:"$RELEASE_STORE_PASSWORD" -out "$KEY" 2>/dev/null
+          fi
           chmod 600 "$KEY"
           VC=$(grep -oP 'versionCode\s*=\s*\K[0-9]+' app/build.gradle.kts | head -1)
-          KEY_ID="${RUNTIME_INDEX_KEY_ID:-runtime-2026-10}"
+          KEY_ID="${RUNTIME_INDEX_KEY_ID:-release-keystore}"
           python3 scripts/write-runtime-index.py \
             --repo "$GITHUB_REPOSITORY" \
             --tag "$GITHUB_REF_NAME" \
@@ -575,7 +586,7 @@ jobs:
           python3 scripts/sign-runtime-index.py --verify \
             --pubkey app/src/main/res/raw/runtime_index_pub.pem \
             --in release/runtime-index.json --sig release/runtime-index.json.sig
-          rm -f "$KEY"
+          rm -f "$KEY" "$KS"
           ls -lh release/
 
       - name: 生成发布说明

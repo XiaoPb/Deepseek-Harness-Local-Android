@@ -121,10 +121,6 @@ rm -rf "$PKG_DIR/node_modules/.bin" "$PKG_DIR/node_modules/.package-lock.json"
 "$FIND" "$PKG_DIR/node_modules" -type f \( -name '*.map' -o -name '*.d.ts' -o -name '*.d.mts' -o -name '*.d.cts' \) -delete
 
 # ---- 5. 元数据 + 安全校验 --------------------------------------------------
-cat > "$PKG_DIR/hardssh-bundle.json" <<EOF
-{"name":"@xiaopb/dsh-hardssh","version":"$VERSION","source":"github:XiaoPb/dsh-hardssh","ref":"v$VERSION","npmIntegrity":"$INTEGRITY","tgzUrl":"$TGZ_URL"}
-EOF
-
 test -f "$PKG_DIR/node_modules/ssh2/package.json" || { echo "错误：ssh2 依赖缺失" >&2; exit 1; }
 test -f "$PKG_DIR/node_modules/ws/package.json" || { echo "错误：ws 依赖缺失" >&2; exit 1; }
 
@@ -134,6 +130,7 @@ LINKS="$("$FIND" "$PKG_DIR" -type l -print)"
 [ -z "$LINKS" ] || { echo "错误：混入符号链接：" >&2; printf '  %s\n' $LINKS >&2; exit 1; }
 
 # bundle sha256：按相对路径排序后对 "path\0content" 做流式摘要（跨平台、可复现）。
+# 在写入 hardssh-bundle.json 之前算，避免元数据自引用。
 BUNDLE_SHA="$(node -e '
   const fs=require("fs"), path=require("path"), crypto=require("crypto");
   const root=process.argv[1];
@@ -147,6 +144,10 @@ BUNDLE_SHA="$(node -e '
   for(const r of files){ h.update(r); h.update("\0"); h.update(fs.readFileSync(path.join(root,r))); h.update("\0"); }
   process.stdout.write(h.digest("hex"));
 ' "$PKG_DIR")"
+
+cat > "$PKG_DIR/hardssh-bundle.json" <<EOF
+{"name":"@xiaopb/dsh-hardssh","version":"$VERSION","source":"github:XiaoPb/dsh-hardssh","ref":"v$VERSION","npmIntegrity":"$INTEGRITY","tgzUrl":"$TGZ_URL","bundleSha256":"$BUNDLE_SHA"}
+EOF
 
 rm -rf "$OUT/hardssh"
 cp -a "$PKG_DIR" "$OUT/hardssh"

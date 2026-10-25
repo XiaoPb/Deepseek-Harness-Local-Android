@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""sign-runtime-index.py —— 用 EC P-256 私钥对 runtime-index.json 原始字节签名。
+"""sign-runtime-index.py —— 对 runtime-index.json 原始字节做 detached 签名。
 
-产物是 base64 的 detached ECDSA 签名（`runtime-index.json.sig`）；
-App 用内置公钥做 SHA256withECDSA 验签。
+默认复用 APK 正式签名密钥（RSA-4096 / SHA256withRSA）；也兼容 EC P-256
+（SHA256withECDSA）。产物是 base64 的签名（`runtime-index.json.sig`），
+App 用内置公钥验签。
 
 用法:
   python scripts/sign-runtime-index.py --key keystore/runtime-index-signing-key.pem \

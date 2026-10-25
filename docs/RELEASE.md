@@ -61,7 +61,6 @@ CI 使用环境变量覆盖本地配置：`DSH_RELEASE_STORE_FILE` / `DSH_RELEAS
 | `RELEASE_STORE_PASSWORD` | `dsh-release.credentials.txt` 里的 `storePassword` |
 | `RELEASE_KEY_ALIAS` | `dsh-release` |
 | `RELEASE_KEY_PASSWORD` | 同 `storePassword`（PKCS12 密钥库两者相同） |
-| `RUNTIME_INDEX_SIGNING_KEY` | 运行时索引签名私钥（EC P-256）的 base64；由 `scripts/generate-index-key.sh` 生成，见 §2.4 |
 
 用 GitHub CLI 添加（本机未安装 `gh`，可在任意装有 `gh` 的机器执行）：
 
@@ -102,21 +101,28 @@ CI 每次 tag 构建都会用 `apksigner verify --print-certs` 比对实际签�
 并把上面 4 个 secret 移到该 Environment（此时需要把 workflow 的 `build-apk` 或新发布 job
 指定 `environment: release`）。当前实现使用 Repository secrets，保持简单。
 
-### 2.4 运行时索引签名密钥（v1.4.20）
+### 2.4 运行时索引签名（复用 APK 正式签名密钥）
 
-`publish-release` 会为 `runtime-index.json` 生成 detached EC P-256 签名（`SHA256withECDSA`），
-App 用内置公钥验签；缺这个 secret 时 tag 发布会失败（不允许发布未签名索引）。
+`publish-release` 为 `runtime-index.json` 生成 detached 签名（默认 `SHA256withRSA`），
+App 用内置公钥（`app/src/main/res/raw/runtime_index_pub.pem`）验签。
+
+**不新增 secret**：CI 在发布 job 里从 `RELEASE_KEYSTORE_BASE64` 解码 PKCS12，用
+`RELEASE_STORE_PASSWORD` + `RELEASE_KEY_ALIAS` 取出私钥，签名后立即删除临时文件。
+因此索引签名与 APK 签名使用同一把 key：
+
+- 优点：Fork 只需配置已有的 4 个 `RELEASE_*` secret；不会出现“APK 能装、索引验不过”的错配。
+- 代价：这把私钥的用途增加了一项（签索引）；换 key 时索引公钥也要随新 APK 一起换。
+  App 侧兼容 EC P-256 与 RSA 两种公钥，便于轮换。
+
+`app/src/main/res/raw/runtime_index_pub.pem` 由正式 keystore 的证书导出（公钥，非私钥）：
 
 ```bash
-# 一次性生成：私钥写入 keystore/（gitignored），公钥写入 App 资源
-bash scripts/generate-index-key.sh
-# 把 keystore/runtime-index-signing-key.pem.base64 的内容加到 GitHub Secret：
-#   Settings → Secrets and variables → Actions → RUNTIME_INDEX_SIGNING_KEY
-# 公钥 app/src/main/res/raw/runtime_index_pub.pem 必须提交
+openssl pkcs12 -in keystore/dsh-release.keystore -nokeys -clcerts \
+  -passin pass:"$STORE_PASSWORD" -out /tmp/cert.pem
+openssl x509 -in /tmp/cert.pem -pubkey -noout > app/src/main/res/raw/runtime_index_pub.pem
 ```
 
-轮换：重新生成会覆盖密钥对；App 通过 `keyId` 支持双公钥并存，旧 key 保留到不再有旧版 App 为止。
-`RUNTIME_INDEX_KEY_ID`（Repository Variable，可选）默认 `runtime-2026-10`。
+`RUNTIME_INDEX_KEY_ID`（Repository Variable，可选）默认 `release-keystore`。
 
 ---
 
