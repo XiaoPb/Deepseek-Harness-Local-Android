@@ -179,7 +179,7 @@ Normal mode is the default; choose Shizuku or Root only when the task requires a
 
 ## 📦 Installation
 
-**Download a Release (recommended)**: grab the APK from [Releases](https://github.com/Soodok/Deepseek-Harness-Local-Android/releases) (pick `arm64-v8a` for phones; latest is **v1.4.19**), then install with unknown sources allowed.
+**Download a Release (recommended)**: grab the APK from [Releases](https://github.com/Soodok/Deepseek-Harness-Local-Android/releases) (pick `arm64-v8a` for phones; latest is **v1.4.20**), then install with unknown sources allowed.
 
 > 📦 **Which file to pick**:
 > - **Full package** (no `-noruntime` suffix): bundles the Node.js runtime (~150–230 MB), works offline.

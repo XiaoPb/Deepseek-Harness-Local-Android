@@ -205,7 +205,7 @@ specialUse 前台服务 + 指数退避监督器扛住系统回收，长任务锁
 
 ## 📦 安装
 
-**下载 Release（推荐）**：前往 [Releases](https://github.com/Soodok/Deepseek-Harness-Local-Android/releases) 下载 APK（手机选 `arm64-v8a`，最新版 **v1.4.19**），允许安装未知来源应用后安装。
+**下载 Release（推荐）**：前往 [Releases](https://github.com/Soodok/Deepseek-Harness-Local-Android/releases) 下载 APK（手机选 `arm64-v8a`，最新版 **v1.4.20**），允许安装未知来源应用后安装。
 
 > 📦 **Release 里有两种包，怎么选**：
 > - **完整包**（文件名不带 `-noruntime`）：内含 Node 运行时，约 150–230MB，装完离线可用；

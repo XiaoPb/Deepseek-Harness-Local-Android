@@ -169,7 +169,7 @@ Normaler Modus ist der Standard; Optionen, deren Fähigkeit noch nicht bereitste
 
 ## 📦 Installation
 
-**Release herunterladen (empfohlen)**: Hol dir die APK von [Releases](https://github.com/Soodok/Deepseek-Harness-Local-Android/releases) (für Smartphones `arm64-v8a` wählen; aktuell **v1.4.19**).
+**Release herunterladen (empfohlen)**: Hol dir die APK von [Releases](https://github.com/Soodok/Deepseek-Harness-Local-Android/releases) (für Smartphones `arm64-v8a` wählen; aktuell **v1.4.20**).
 
 > 📦 **Welche Datei?**
 > - **Vollversion** (ohne `-noruntime`): enthält die Node.js-Laufzeit (~150–230 MB), offline nutzbar.
