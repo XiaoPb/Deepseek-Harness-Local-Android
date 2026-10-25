@@ -2186,3 +2186,12 @@ URL: https://github.com/Soodok/Deepseek-Harness-Local-Android/releases/tag/v1.4.
 - CI 首跑（本地按用户要求未编译）：Gradle `-Ppackage` 生成式 assets、2×2 矩阵、tag 的 index 签名。
 - 真机首启 noruntime 下载/续传/代理、runtime 重装后 SSH 恢复、完整包不被旧内置运行时降级。
 
+### 验证记录（2026-10-25）
+- CI run [`40185178035`](https://github.com/XiaoPb/Deepseek-Harness-Local-Android/actions/runs/40185178035) @ `68c7421` **全绿**：build-hardssh、collect-runtime ×2、build-apk（full/noruntime × arm64/x86_64）、monitor。
+- 产物：`runtime-arm64-v8a.zip` 123.9 MB（原 219.5 MB，zod/SONAME 去重生效）；noruntime 双 APK artifact 31.6 MB；full 双 APK artifact 279.4 MB。
+- 首次 CI 编译失败根因：`compileSdk 36` 的 `android.content.pm.Signature` 移除了 `getPublicKey()`；改为 `toByteArray()` → X.509 证书 → `publicKey`。
+- 本地额外验证：`assembleDebug -Ppackage=noruntime` 23.4 MB（无 runtime.zip、含 hardssh/公钥）；`-Ppackage=full` 229 MB（基线旧 runtime）并通过 `verify-apk-assets.py`。
+- tag 通道本地验证：`GITHUB_REF_TYPE=tag` 生成 `<fork>/releases/download/v1.4.19/runtime-<abi>.zip` + sha；`branch/main` 生成 `releases/latest/download/...` 且不带 sha；`GITHUB_REPOSITORY=XiaoPb/...` 时 `RepoConfig`/manifest 全部指向 Fork。
+- 索引签名本地模拟：真实 `dsh-release.keystore` → PKCS12 取私钥 → RSA 签名 → 证书公钥验签 OK。
+- 未验证：`publish-edge` / `publish-preview` / `publish-release` 的实际 GitHub Release 上传（dev push 上按设计跳过）。
+
