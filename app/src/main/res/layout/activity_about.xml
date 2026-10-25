@@ -3,7 +3,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="#FF101418">
+    android:background="@color/bg">
 
     <!-- 顶部栏：返回 + 标题（与设置页一致） -->
     <LinearLayout
@@ -11,7 +11,7 @@
         android:layout_height="56dp"
         android:orientation="horizontal"
         android:gravity="center_vertical"
-        android:background="#FF101418"
+        android:background="@color/bg"
         android:elevation="2dp">
 
         <ImageView
@@ -29,7 +29,7 @@
             android:layout_weight="1"
             android:gravity="center_vertical"
             android:text="@string/about_title"
-            android:textColor="#FFFFFFFF"
+            android:textColor="@color/text_primary"
             android:textSize="20sp"
             android:textStyle="bold" />
     </LinearLayout>
@@ -67,7 +67,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="@string/about_app_name"
-                    android:textColor="#FFFFFFFF"
+                    android:textColor="@color/text_primary"
                     android:textSize="20sp"
                     android:textStyle="bold"
                     android:layout_marginTop="12dp" />
@@ -76,7 +76,7 @@
                     android:id="@+id/txtVersion"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:textColor="#FF8A94A3"
+                    android:textColor="@color/text_secondary"
                     android:textSize="13sp"
                     android:layout_marginTop="4dp" />
             </LinearLayout>
@@ -94,7 +94,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="@string/about_intro"
-                    android:textColor="#FFC9D1DB"
+                    android:textColor="@color/text_secondary"
                     android:textSize="14sp"
                     android:lineSpacingExtra="4dp" />
 
@@ -102,7 +102,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="@string/about_based"
-                    android:textColor="#FF8A94A3"
+                    android:textColor="@color/text_secondary"
                     android:textSize="12sp"
                     android:layout_marginTop="10dp" />
 
@@ -110,13 +110,13 @@
                     android:layout_width="match_parent"
                     android:layout_height="0.5dp"
                     android:layout_marginVertical="14dp"
-                    android:background="#22FFFFFF" />
+                    android:background="@color/divider" />
 
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="@string/about_author"
-                    android:textColor="#FFFFFFFF"
+                    android:textColor="@color/text_primary"
                     android:textSize="14sp"
                     android:textStyle="bold" />
             </LinearLayout>
@@ -145,14 +145,14 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="@string/about_open_source"
-                        android:textColor="#FFFFFFFF"
+                        android:textColor="@color/text_primary"
                         android:textSize="15sp" />
 
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="@string/about_repo"
-                        android:textColor="#FF7DD3FC"
+                        android:textColor="@color/accent"
                         android:textSize="13sp"
                         android:layout_marginTop="2dp" />
                 </LinearLayout>
@@ -188,14 +188,14 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="@string/about_qq_group"
-                        android:textColor="#FFFFFFFF"
+                        android:textColor="@color/text_primary"
                         android:textSize="15sp" />
 
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:text="@string/about_qq_group_id"
-                        android:textColor="#FF7DD3FC"
+                        android:textColor="@color/accent"
                         android:textSize="13sp"
                         android:fontFamily="monospace"
                         android:layout_marginTop="2dp" />
@@ -206,7 +206,7 @@
                     android:layout_height="wrap_content"
                     android:paddingHorizontal="6dp"
                     android:text="@string/about_qq_group_tap"
-                    android:textColor="#FF8A94A3"
+                    android:textColor="@color/text_secondary"
                     android:textSize="12sp" />
             </LinearLayout>
 
@@ -234,7 +234,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="@string/about_check_update"
-                        android:textColor="#FFFFFFFF"
+                        android:textColor="@color/text_primary"
                         android:textSize="15sp" />
 
                     <TextView
@@ -242,7 +242,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:text="@string/about_update_idle"
-                        android:textColor="#FF8A94A3"
+                        android:textColor="@color/text_secondary"
                         android:textSize="13sp"
                         android:layout_marginTop="2dp" />
                 </LinearLayout>
@@ -277,7 +277,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="@string/about_runtime"
-                        android:textColor="#FFFFFFFF"
+                        android:textColor="@color/text_primary"
                         android:textSize="15sp" />
 
                     <TextView
@@ -285,7 +285,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:text="@string/about_runtime_idle"
-                        android:textColor="#FF8A94A3"
+                        android:textColor="@color/text_secondary"
                         android:textSize="13sp"
                         android:layout_marginTop="2dp" />
                 </LinearLayout>
@@ -304,7 +304,7 @@
                 android:background="@drawable/bg_card"
                 android:padding="16dp"
                 android:text="@string/about_privacy_note"
-                android:textColor="#FF8A94A3"
+                android:textColor="@color/text_secondary"
                 android:textSize="12sp"
                 android:lineSpacingExtra="3dp" />
         </app.dsh.mobile.MaxWidthLinearLayout>

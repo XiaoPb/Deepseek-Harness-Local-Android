@@ -1,31 +1,26 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.Dsh" parent="android:Theme.Material.NoActionBar">
-        <item name="android:statusBarColor">#FF101418</item>
-        <item name="android:navigationBarColor">#FF101418</item>
-        <item name="android:windowBackground">#FF101418</item>
-        <!-- v1.2.45：全部 AlertDialog 统一深色圆角皮肤。此前只有少数弹窗手动
-             setBackgroundDrawableResource(bg_dialog_rounded)，其余仍是框架默认
-             （部分 ROM 上是方形浅色"老安卓"样式，用户实测反馈）。 -->
+    <style name="Theme.Dsh" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/bg</item>
+        <item name="android:statusBarColor">@color/bg</item>
+        <item name="android:navigationBarColor">@color/bg</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
         <item name="android:alertDialogTheme">@style/Theme.Dsh.Dialog</item>
     </style>
 
-    <!-- v1.2.79：Spinner 下拉弹框此前是框架默认（白底方形"老安卓"样式，用户实测反馈）。
-         这里定义暗色皮肤：弹框背景用项目统一的深色圆角卡片，条目文字用亮色。 -->
     <style name="Theme.Dsh.Spinner" parent="android:Theme.Material.Light.NoActionBar">
         <item name="android:popupBackground">@drawable/bg_menu_card</item>
-        <item name="android:textColorPrimary">#FFE8ECF2</item>
-        <item name="android:textColorSecondary">#FF9AA5B4</item>
-        <item name="android:colorAccent">#FF7DD3FC</item>
-        <!-- 下拉条目：暗色文字 + 深色背景 -->
-        <item name="android:textColor">#FFE8ECF2</item>
+        <item name="android:textColorPrimary">@color/text_primary</item>
+        <item name="android:textColorSecondary">@color/text_secondary</item>
+        <item name="android:colorAccent">@color/accent</item>
+        <item name="android:textColor">@color/text_primary</item>
     </style>
 
-    <style name="Theme.Dsh.Dialog" parent="android:Theme.Material.Dialog.Alert">
-        <!-- 与手动设过背景的弹窗同款：深色 #1D232B + 22dp 圆角 -->
+    <style name="Theme.Dsh.Dialog" parent="android:Theme.Material.Light.Dialog.Alert">
         <item name="android:windowBackground">@drawable/bg_dialog_rounded</item>
-        <item name="android:colorAccent">#FF7DD3FC</item>
-        <item name="android:textColorPrimary">#FFE8ECF2</item>
-        <item name="android:textColorSecondary">#FF9AA5B4</item>
+        <item name="android:colorAccent">@color/accent</item>
+        <item name="android:textColorPrimary">@color/text_primary</item>
+        <item name="android:textColorSecondary">@color/text_secondary</item>
     </style>
 </resources>

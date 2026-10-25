@@ -5,7 +5,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="#FF101418">
+    android:background="@color/bg">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -29,7 +29,7 @@
             android:layout_weight="1"
             android:gravity="center_vertical"
             android:text="@string/asrapp_title"
-            android:textColor="#FFFFFFFF"
+            android:textColor="@color/text_primary"
             android:textSize="20sp"
             android:textStyle="bold" />
     </LinearLayout>
@@ -54,7 +54,7 @@
                 android:paddingHorizontal="8dp"
                 android:paddingBottom="12dp"
                 android:text="@string/asrapp_subtitle"
-                android:textColor="#FF8A94A3"
+                android:textColor="@color/text_secondary"
                 android:textSize="12sp" />
 
             <!-- ============ 主卡片：我们的识别服务 ============ -->
@@ -76,7 +76,7 @@
                     android:padding="9dp"
                     android:src="@drawable/ic_download"
                     android:background="@drawable/bg_icon_chip_soft"
-                    android:tint="#FF7DD3FC" />
+                    android:tint="@color/accent" />
 
                 <LinearLayout
                     android:layout_width="0dp"
@@ -89,7 +89,7 @@
                         android:id="@+id/oursTitle"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:textColor="#FFFFFFFF"
+                        android:textColor="@color/text_primary"
                         android:textSize="16sp"
                         android:textStyle="bold" />
 
@@ -98,7 +98,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="4dp"
-                        android:textColor="#FF8A94A3"
+                        android:textColor="@color/text_secondary"
                         android:textSize="12sp" />
 
                     <TextView
@@ -106,7 +106,7 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
-                        android:textColor="#FF7DD3FC"
+                        android:textColor="@color/accent"
                         android:textSize="13sp"
                         android:textStyle="bold" />
                 </LinearLayout>
@@ -125,7 +125,7 @@
                 android:layout_marginStart="8dp"
                 android:layout_marginBottom="10dp"
                 android:text="@string/asrapp_guide_title"
-                android:textColor="#FFFFFFFF"
+                android:textColor="@color/text_primary"
                 android:textSize="15sp"
                 android:textStyle="bold" />
 
@@ -143,7 +143,7 @@
                     android:id="@+id/step1Title"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:textColor="#FF7DD3FC"
+                    android:textColor="@color/accent"
                     android:textSize="14sp"
                     android:textStyle="bold" />
 
@@ -152,7 +152,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="6dp"
-                    android:textColor="#FFB8C0CC"
+                    android:textColor="@color/text_secondary"
                     android:textSize="12sp"
                     android:lineSpacingExtra="4dp" />
             </LinearLayout>
@@ -171,7 +171,7 @@
                     android:id="@+id/step2Title"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:textColor="#FF7DD3FC"
+                    android:textColor="@color/accent"
                     android:textSize="14sp"
                     android:textStyle="bold" />
 
@@ -180,7 +180,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="6dp"
-                    android:textColor="#FFB8C0CC"
+                    android:textColor="@color/text_secondary"
                     android:textSize="12sp"
                     android:lineSpacingExtra="4dp" />
             </LinearLayout>
@@ -199,7 +199,7 @@
                     android:id="@+id/step3Title"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:textColor="#FF7DD3FC"
+                    android:textColor="@color/accent"
                     android:textSize="14sp"
                     android:textStyle="bold" />
 
@@ -208,7 +208,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="6dp"
-                    android:textColor="#FFB8C0CC"
+                    android:textColor="@color/text_secondary"
                     android:textSize="12sp"
                     android:lineSpacingExtra="4dp" />
             </LinearLayout>
@@ -227,7 +227,7 @@
                     android:id="@+id/step4Title"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:textColor="#FF7DD3FC"
+                    android:textColor="@color/accent"
                     android:textSize="14sp"
                     android:textStyle="bold" />
 
@@ -236,7 +236,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="6dp"
-                    android:textColor="#FFB8C0CC"
+                    android:textColor="@color/text_secondary"
                     android:textSize="12sp"
                     android:lineSpacingExtra="4dp" />
             </LinearLayout>
@@ -256,7 +256,7 @@
                     android:id="@+id/troubleTitle"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:textColor="#FFF2B36B"
+                    android:textColor="@color/warning"
                     android:textSize="14sp"
                     android:textStyle="bold" />
 
@@ -265,7 +265,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="6dp"
-                    android:textColor="#FFB8C0CC"
+                    android:textColor="@color/text_secondary"
                     android:textSize="12sp"
                     android:lineSpacingExtra="4dp" />
             </LinearLayout>
@@ -294,7 +294,7 @@
                         android:id="@+id/repoTitle"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:textColor="#FFFFFFFF"
+                        android:textColor="@color/text_primary"
                         android:textSize="14sp"
                         android:textStyle="bold" />
 
@@ -303,7 +303,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="3dp"
-                        android:textColor="#FF8A94A3"
+                        android:textColor="@color/text_secondary"
                         android:textSize="12sp" />
                 </LinearLayout>
 

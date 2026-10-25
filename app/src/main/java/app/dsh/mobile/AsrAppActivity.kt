@@ -25,7 +25,7 @@ import android.widget.Toast
  * 四步与 README / release notes 保持一致：
  *   ① 下载 APK ② 打开下载模型 ③ 设为系统识别服务 ④ 在 DSH Mobile 里启用
  */
-class AsrAppActivity : Activity() {
+class AsrAppActivity : ThemedActivity() {
 
     override fun attachBaseContext(newBase: android.content.Context) {
         super.attachBaseContext(LocaleHelper.wrap(newBase))

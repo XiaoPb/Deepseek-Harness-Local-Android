@@ -42,7 +42,7 @@ import app.dsh.mobile.engine.PluginMarket.Entry
  *  - 装前原生模块预检 + 风险确认（[NativePluginCheck]）；
  *  - 按钮状态防抖与视图存活检查（预检期间可能已离开页面）。
  */
-class PluginStoreActivity : Activity() {
+class PluginStoreActivity : ThemedActivity() {
 
     /** 与其余页面一致，按应用内语言偏好包装 Context */
     override fun attachBaseContext(newBase: android.content.Context) {

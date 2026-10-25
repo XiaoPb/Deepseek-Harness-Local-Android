@@ -8,18 +8,18 @@
     android:viewportWidth="24"
     android:viewportHeight="24">
     <path
-        android:fillColor="#FFFFFFFF"
+        android:fillColor="@color/icon_color"
         android:pathData="M3,10h2v4H3z" />
     <path
-        android:fillColor="#FFFFFFFF"
+        android:fillColor="@color/icon_color"
         android:pathData="M7,7h2v10H7z" />
     <path
-        android:fillColor="#FFFFFFFF"
+        android:fillColor="@color/icon_color"
         android:pathData="M11,4h2v16h-2z" />
     <path
-        android:fillColor="#FFFFFFFF"
+        android:fillColor="@color/icon_color"
         android:pathData="M15,7h2v10h-2z" />
     <path
-        android:fillColor="#FFFFFFFF"
+        android:fillColor="@color/icon_color"
         android:pathData="M19,10h2v4h-2z" />
 </vector>

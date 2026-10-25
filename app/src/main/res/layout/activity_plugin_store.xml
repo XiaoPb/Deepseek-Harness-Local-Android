@@ -5,7 +5,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="#FF101418">
+    android:background="@color/bg">
 
     <!-- 顶部栏：返回箭头 + 标题 -->
     <LinearLayout
@@ -13,7 +13,7 @@
         android:layout_height="56dp"
         android:orientation="horizontal"
         android:gravity="center_vertical"
-        android:background="#FF101418"
+        android:background="@color/bg"
         android:elevation="2dp">
 
         <ImageView
@@ -31,7 +31,7 @@
             android:layout_weight="1"
             android:gravity="center_vertical"
             android:text="@string/plugin_center_title"
-            android:textColor="#FFFFFFFF"
+            android:textColor="@color/text_primary"
             android:textSize="20sp"
             android:textStyle="bold" />
     </LinearLayout>
@@ -125,8 +125,8 @@
             android:layout_width="match_parent"
             android:layout_height="42dp"
             android:hint="@string/plugin_search_hint"
-            android:textColor="#FFFFFFFF"
-            android:textColorHint="#FF5A626E"
+            android:textColor="@color/text_primary"
+            android:textColorHint="@color/text_muted"
             android:textSize="14sp"
             android:singleLine="true"
             android:imeOptions="actionSearch"
@@ -164,7 +164,7 @@
         android:layout_height="wrap_content"
         android:paddingHorizontal="24dp"
         android:paddingBottom="6dp"
-        android:textColor="#FF8A94A3"
+        android:textColor="@color/text_secondary"
         android:textSize="12sp" />
 
     <!-- 结果列表（可滚动） -->

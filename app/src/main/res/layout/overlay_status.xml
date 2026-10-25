@@ -45,7 +45,7 @@
             android:textSize="13sp"
             android:textStyle="bold"
             android:letterSpacing="0.01"
-            android:textColor="#FFE8EAED"
+            android:textColor="@color/text_primary"
             android:maxLines="1"
             android:ellipsize="end"
             android:text="DSH" />
@@ -71,7 +71,7 @@
         android:layout_marginTop="4dp"
         android:layout_marginStart="16dp"
         android:textSize="11sp"
-        android:textColor="#FF9AA0A6"
+        android:textColor="@color/text_muted"
         android:maxLines="2"
         android:ellipsize="end"
         android:visibility="gone"

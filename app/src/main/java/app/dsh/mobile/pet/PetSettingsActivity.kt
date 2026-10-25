@@ -1,6 +1,7 @@
 package app.dsh.mobile.pet
 
 import android.app.Activity
+import app.dsh.mobile.ThemedActivity
 import android.app.AlertDialog
 import android.app.ProgressDialog
 import android.content.Intent
@@ -30,7 +31,7 @@ import app.dsh.mobile.service.EngineService
  * 所有状态都从文件/StateFlow 现读，不缓存“已安装”之类的内存标记。
  */
 @Suppress("DEPRECATION")
-class PetSettingsActivity : Activity() {
+class PetSettingsActivity : ThemedActivity() {
 
     private lateinit var content: LinearLayout
     private var enableSwitch: Switch? = null
@@ -402,7 +403,7 @@ class PetSettingsActivity : Activity() {
         }
         col.addView(TextView(this).apply {
             text = getString(R.string.pet_enable)
-            setTextColor(0xFFFFFFFF.toInt())
+            setTextColor(getColor(R.color.text_primary))
             textSize = 16f
         })
         col.addView(TextView(this).apply {
@@ -451,7 +452,7 @@ class PetSettingsActivity : Activity() {
         }
         col.addView(TextView(this).apply {
             text = title
-            setTextColor(0xFFFFFFFF.toInt())
+            setTextColor(getColor(R.color.text_primary))
             textSize = 15f
         })
         if (subtitle.isNotBlank()) {

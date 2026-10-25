@@ -42,6 +42,11 @@
     <string name="ob_title">欢迎使用 DSH Mobile</string>
     <string name="ob_subtitle">首次启动先按您的喜好与环境初始化，之后不再打扰。</string>
     <string name="ob_orientation_label">默认显示方向</string>
+    <string name="ob_theme_label">外观主题</string>
+    <string name="ob_theme_desc">选择原生界面的主题；聊天界面由 dsh 自己的设置管理。</string>
+    <string name="theme_dark">深色</string>
+    <string name="theme_light">浅色</string>
+    <string name="theme_system">跟随系统</string>
     <string name="ob_orientation_desc">竖屏（手机）适合单手浏览；横屏切换到桌面布局；自动跟随设备旋转（物理横屏时用桌面布局）</string>
     <string name="ob_orient_portrait">竖屏（手机）</string>
     <string name="ob_orient_landscape">横屏（电脑布局）</string>
@@ -89,6 +94,8 @@
     <string name="setting_applied_now">已立即生效</string>
     <string name="setting_scale">页面缩放</string>
     <string name="setting_scale_sub">调节网页显示比例（浏览器缩放）</string>
+    <string name="setting_theme">外观主题</string>
+    <string name="setting_theme_sub">深色、浅色，或跟随系统</string>
 
     <string name="setting_priv_mode">运行权限模式</string>
     <string name="setting_priv_mode_sub">决定 AI 能触及的系统能力边界，切换后自动重启引擎</string>

@@ -42,6 +42,11 @@
     <string name="ob_title">Welcome to DSH Mobile</string>
     <string name="ob_subtitle">Set things up to your liking on first launch — you won\'t see this again.</string>
     <string name="ob_orientation_label">Default orientation</string>
+    <string name="ob_theme_label">Appearance</string>
+    <string name="ob_theme_desc">Choose the native shell theme. The chat interface follows dsh&#8217;s own settings.</string>
+    <string name="theme_dark">Dark</string>
+    <string name="theme_light">Light</string>
+    <string name="theme_system">Follow system</string>
     <string name="ob_orientation_desc">Portrait (phone) suits one-handed browsing; landscape switches to the desktop layout; auto follows device rotation (desktop layout while physically landscape)</string>
     <string name="ob_orient_portrait">Portrait (phone)</string>
     <string name="ob_orient_landscape">Landscape (desktop layout)</string>
@@ -89,6 +94,8 @@
     <string name="setting_applied_now">applied immediately</string>
     <string name="setting_scale">Page zoom</string>
     <string name="setting_scale_sub">Adjust how web pages are scaled (browser zoom)</string>
+    <string name="setting_theme">Appearance</string>
+    <string name="setting_theme_sub">Dark, light, or follow the system</string>
 
     <string name="setting_priv_mode">Permission mode</string>
     <string name="setting_priv_mode_sub">Sets how much of the system the AI can reach. Switching restarts the engine</string>
