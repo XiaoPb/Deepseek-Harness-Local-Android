@@ -137,6 +137,33 @@ class RuntimeInstaller(private val ctx: Context) {
         return false
     }
 
+    /**
+     * 显式安装云端索引里的运行时（设置/关于页“检查运行时更新”）。
+     * 与首启安装走同一条 staging 流程；调用方需在后台线程执行。
+     */
+    fun installFromIndex(
+        entry: RuntimeIndexClient.Entry,
+        indexUrl: String?,
+        proxies: List<String>,
+        onProgress: (Float) -> Unit = {},
+        onDetail: (BootTrace.Install) -> Unit = {},
+    ): String {
+        check(!installing) { "runtime install already in progress" }
+        val info = RuntimeInfo(
+            version = entry.version,
+            builtAt = 0L,
+            bundled = false,
+            url = entry.urls.firstOrNull(),
+            urls = entry.urls,
+            sha256 = entry.sha256,
+            size = entry.size,
+            unpackedBytes = entry.unpackedBytes,
+        )
+        val manifest = Manifest("noruntime", defaultAbi(), info, indexUrl, proxies)
+        install(manifest, onProgress, onDetail)
+        return entry.version
+    }
+
     /** 读安装元数据（.runtime.json），旧安装回退到纯文本版戳。 */
     private fun readInstalled(): Installed? = runCatching {
         if (metaFile.isFile) {
