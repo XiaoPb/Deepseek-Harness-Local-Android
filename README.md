@@ -40,7 +40,7 @@ DSH Mobile 是 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harnes
 | **冷启动到引擎就绪** | **< 10 秒** | 一加 15T（Android 16）真机 |
 | **多服务并行内存** | **< 400 MB** | 引擎 + 多服务并行 |
 | **兼容版本** | **Android 8.0 → 16** | 需 WebView ≥ Chrome 85（API 由 polyfill 补齐，实测最低 96） |
-| **APK 体积** | **约 227 MB** | 含完整 Node.js 运行时 + 19 项扩展的工具链闭包 + 内置 SSH 远程工作区插件 |
+| **APK 体积** | **完整包 ~150–230 MB / 简单包 ~25 MB** | 完整包含 Node.js 运行时；简单包首启下载运行时 |
 | **安装后占用** | **约 720 MB** | 运行时解压后（约 494 MB）+ 应用本体 |
 
 对比：Termux 快照类方案首次启动通常需**数分钟**（解压 + 手动初始化）；本项目的运行时预置在 APK 内，装完即用。proot 系方案（Ubuntu 容器）APK 看着小，但首次使用要另下 500MB～2GB 的 rootfs。
@@ -205,21 +205,29 @@ specialUse 前台服务 + 指数退避监督器扛住系统回收，长任务锁
 
 ## 📦 安装
 
-**下载 Release（推荐）**：前往 [Releases](https://github.com/Soodok/Deepseek-Harness-Local-Android/releases) 下载 APK（手机选 `arm64-v8a`，最新版 **v1.4.17**），允许安装未知来源应用后安装。
+**下载 Release（推荐）**：前往 [Releases](https://github.com/Soodok/Deepseek-Harness-Local-Android/releases) 下载 APK（手机选 `arm64-v8a`，最新版 **v1.4.19**），允许安装未知来源应用后安装。
 
-> 📦 **Release 里有多种包，怎么选**：普通用户下 **`dsh-mobile-*-arm64-v8a.apk`**（正式签名）；
-> 文件名带 **`-debug`** 的是调试签名版，供抓日志调试、或之前就装 debug 渠道的用户继续升级用；
-> 带 `x86_64` 的仅用于模拟器。**正式版与调试版签名不同、无法互相覆盖安装**（会提示「应用签名不一致」），装错需先卸载。
+> 📦 **Release 里有两种包，怎么选**：
+> - **完整包**（文件名不带 `-noruntime`）：内含 Node 运行时，约 150–230MB，装完离线可用；
+> - **简单包**（`*-noruntime.apk`）：不含运行时，体积小得多；首次启动按 `MANIFEST.json` 里的链接下载运行时（支持 `gh-proxy.org` 代理），之后 App 升级不再重下运行时。
+>
+> 两种包都带内置 SSH 插件；运行时可在「关于 → 运行时」里单独检查更新。
+> 文件名带 **`-debug`** 的是调试签名版，仅测试；正式版与调试版签名不同、无法互相覆盖安装。
 
 **从源码构建**（JDK 17 + Android SDK，NDK r26+、CMake 3.22.1）：
 
 ```bash
-./scripts/collect-termux-runtime.sh app/src/main/assets/runtime.zip aarch64
-python scripts/dedupe-runtime.py app/src/main/assets/runtime.zip   # 别名去重，省 ~33MB
-gradle assembleDebug -Pabi=arm64-v8a
+# Linux/CI：统一运行时流水线（收集 + 去重 + 校验 + BUILD.json）
+./scripts/build-runtime.sh --abi arm64-v8a --out dist/runtime-arm64-v8a.zip
+
+# 完整包
+gradle assembleDebug -Ppackage=full -PruntimeZip="$PWD/dist/runtime-arm64-v8a.zip" \
+  -PhardsshDir="$PWD/dist/hardssh"
+# 简单包（不嵌运行时）
+gradle assembleDebug -Ppackage=noruntime -PhardsshDir="$PWD/dist/hardssh"
 ```
 
-或 Fork 后在 GitHub Actions 运行 **android-build** 工作流云端出包。
+hardssh 内置目录由 `scripts/pack-hardssh.sh` 从上游 Release 的 tgz 组装（默认取 npm 最新版）。
 
 **系统要求**：Android 8.0+（**WebView ≥ Chrome 85**）· arm64-v8a / x86_64 · **建议预留 700MB 以上空间**。
 
@@ -250,7 +258,7 @@ gradle assembleDebug -Pabi=arm64-v8a
 
 **数据会上传吗？** 引擎/会话/工作区全在本机；数据是否出设备取决于你配置的模型服务地址。
 
-**APK 为什么约 227MB？** 内置了完整的 Node.js bionic 运行时（解压后约 494 MB）、19 项扩展的工具链闭包、dsh 的依赖树，以及内置的 SSH 远程工作区插件（v1.4.18 起）。这是「不依赖 Termux、装完即用」的代价；Termux 系方案把这部分留给用户自行安装，所以包体更小，但首次使用需要先配置环境。
+**APK 为什么这么大？** 完整包内置了完整的 Node.js bionic 运行时（解压后约 494 MB）、19 项扩展的工具链闭包与 dsh 的依赖树。v1.4.20 起另提供 **noruntime 简单包**：不含运行时，App 升级只需下几十 MB，运行时在首次启动时下载并可独立更新。Termux 系方案把运行时留给用户自行安装，所以包体更小，但首次使用需要先配置环境。
 
 **Agent 怎么展示网页？** 让它起本地 HTTP 服务并给你 `http://127.0.0.1:端口` 链接，点开即预览。
 
