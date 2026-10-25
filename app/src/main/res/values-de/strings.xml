@@ -463,6 +463,16 @@ Sie können auch ohne Update fortfahren, die Oberfläche wird dann aber nicht an
     <!-- v1.3.0: LAN WebUI -->
     <string name="setting_lan_web">LAN-WebUI-Zugriff</string>
     <string name="setting_lan_web_sub">Ermöglicht Browsern im selben Netzwerk den Zugriff auf die WebUI dieses Telefons (Port 3090).</string>
+    <string name="setting_runtime_proxy">Runtime-Download-Proxy</string>
+    <string name="setting_runtime_proxy_sub">Standard gh-proxy.org; direkte GitHub-Downloads sind in einigen Regionen unzuverlässig</string>
+    <string name="setting_runtime_proxy_value_default">Standard · gh-proxy.org (empfohlen)</string>
+    <string name="setting_runtime_proxy_value_direct">Direkt über GitHub (ohne Proxy)</string>
+    <string name="setting_runtime_proxy_value_custom">Benutzerdefiniert · %1$s</string>
+    <string name="setting_runtime_proxy_dialog_hint">Runtime und Update-Index werden über dieses Präfix geladen. Leer lassen für direkten GitHub-Zugriff; Standard %1$s. Nur Präfix-Proxys ({Proxy}/{GitHub-URL}).</string>
+    <string name="setting_runtime_proxy_invalid">Ungültige Proxy-Adresse – bitte eine http(s)-URL eingeben</string>
+    <string name="setting_runtime_proxy_saved">Download-Proxy gespeichert</string>
+    <string name="setting_runtime_proxy_reset">Zurücksetzen</string>
+    <string name="setting_runtime_proxy_reset_done">Standard-Proxy wiederhergestellt</string>
     <string name="lan_web_consent">Beim Aktivieren wird ein zufälliger 6-stelliger Code erzeugt (in die Zwischenablage kopiert und nur einmal angezeigt). Jeder im selben Netzwerk kann mit diesem Code die WebUI öffnen und den Agenten steuern. Nur in vertrauenswürdigen Netzwerken aktivieren.</string>
     <string name="lan_dialog_title">LAN-WebUI ist aktiv</string>
     <string name="lan_dialog_code_label">Zugriffscode (antippen zum Kopieren)</string>
@@ -632,4 +642,5 @@ Sie können auch ohne Update fortfahren, die Oberfläche wird dann aber nicht an
     <string name="about_runtime_installing">Runtime wird installiert… %1$d%%</string>
     <string name="about_runtime_installed">Runtime installiert – Engine wird neu gestartet</string>
     <string name="about_runtime_no_pin">Signierter Runtime-Index nicht verfügbar</string>
+    <string name="about_runtime_busy">Runtime wird installiert – bitte warten</string>
 </resources>

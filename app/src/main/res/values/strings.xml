@@ -475,6 +475,16 @@ You can still continue without updating, but the interface will not display.</st
     <string name="voice_send_failed">Send failed: %1$s</string>
         <string name="setting_lan_web">LAN access to WebUI</string>
     <string name="setting_lan_web_sub">Let another device on this network use the WebUI. Off by default.</string>
+    <string name="setting_runtime_proxy">Runtime download proxy</string>
+    <string name="setting_runtime_proxy_sub">Default gh-proxy.org; direct GitHub downloads often fail in some regions</string>
+    <string name="setting_runtime_proxy_value_default">Default · gh-proxy.org (recommended)</string>
+    <string name="setting_runtime_proxy_value_direct">Direct GitHub (no proxy)</string>
+    <string name="setting_runtime_proxy_value_custom">Custom · %1$s</string>
+    <string name="setting_runtime_proxy_dialog_hint">Runtime and update index are downloaded through this prefix. Leave empty for direct GitHub; default %1$s. Prefix proxies only ({proxy}/{GitHub URL}).</string>
+    <string name="setting_runtime_proxy_invalid">Invalid proxy address — enter an http(s) URL</string>
+    <string name="setting_runtime_proxy_saved">Download proxy saved</string>
+    <string name="setting_runtime_proxy_reset">Reset</string>
+    <string name="setting_runtime_proxy_reset_done">Default proxy restored</string>
     <string name="lan_web_consent">This exposes the agent running on this phone — it can read/write files, run commands and control the screen — to every device on this network.\n\nOnly use it on a trusted network (e.g. home Wi-Fi). Anyone who reaches the address can control this phone until you turn this switch off.</string>
     <string name="lan_dialog_title">LAN access enabled</string>
     <string name="lan_dialog_code_label">Access code (tap to copy)</string>
@@ -623,4 +633,5 @@ You can still continue without updating, but the interface will not display.</st
     <string name="about_runtime_installing">Installing runtime… %1$d%%</string>
     <string name="about_runtime_installed">Runtime installed — restarting the engine</string>
     <string name="about_runtime_no_pin">Signed runtime index unavailable</string>
+    <string name="about_runtime_busy">Runtime is being installed — please wait</string>
 </resources>

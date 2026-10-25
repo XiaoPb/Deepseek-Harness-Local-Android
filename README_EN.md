@@ -184,7 +184,9 @@ Normal mode is the default; choose Shizuku or Root only when the task requires a
 > 📦 **Which file to pick**:
 > - **Full package** (no `-noruntime` suffix): bundles the Node.js runtime (~150–230 MB), works offline.
 > - **noruntime package** (`*-noruntime.apk`): much smaller; on first launch it downloads the runtime
->   from the link in `MANIFEST.json` (gh-proxy supported). App updates no longer re-download the runtime.
+>   from the link in `MANIFEST.json`. It uses the `gh-proxy.org` prefix proxy by default (direct GitHub
+>   downloads often fail in some regions); change it or switch to a direct connection under
+>   Settings → Extensions → Runtime download proxy. App updates no longer re-download the runtime.
 >
 > Both variants include the bundled SSH plugin; runtime updates are available under About → Runtime.
 > Names ending in **`-debug`** are debug-signed builds; release and debug builds cannot be installed

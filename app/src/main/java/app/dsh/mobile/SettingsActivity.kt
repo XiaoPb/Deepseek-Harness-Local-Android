@@ -9,8 +9,10 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.text.InputType
 import android.view.Gravity
 import android.view.View
+import android.widget.EditText
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.SeekBar
@@ -21,6 +23,7 @@ import app.dsh.mobile.engine.ChatRecovery
 import app.dsh.mobile.engine.ExtensionManager
 import app.dsh.mobile.engine.PrivMode
 import app.dsh.mobile.engine.Privilege
+import app.dsh.mobile.engine.RuntimeDownloadConfig
 import app.dsh.mobile.engine.SelfCheck
 import app.dsh.mobile.engine.TtsManager
 import app.dsh.mobile.engine.LanWebProxy
@@ -148,6 +151,14 @@ class SettingsActivity : ThemedActivity() {
                 Thread({ runCatching { LanWebProxy.stop() } }, "lan-stop").apply { isDaemon = true }.start()
                 lanSubText()
             }
+        }
+
+        // —— 扩展：运行时下载代理（v1.4.21）——
+        // 运行时 zip / 签名索引都从 GitHub Releases 取；国内直连经常超时。
+        // 默认 gh-proxy.org，可换自建前缀，留空则直连。
+        refreshRuntimeProxyRow()
+        findViewById<LinearLayout>(R.id.rowRuntimeProxy).setOnClickListener {
+            showRuntimeProxyDialog()
         }
 
         // —— 顶部返回 ——
@@ -855,6 +866,88 @@ class SettingsActivity : ThemedActivity() {
             }
             .setNegativeButton(android.R.string.cancel, null)
             .showStyled()
+    }
+
+    // ================= 扩展：运行时下载代理 =================
+
+    /** 刷新「运行时下载代理」行的说明文字（默认 / 自定义 / 直连）。 */
+    private fun refreshRuntimeProxyRow() {
+        val sub = findViewById<TextView>(R.id.subRuntimeProxy)
+        val current = RuntimeDownloadConfig.proxy(this)
+        sub.text = when {
+            current.isBlank() -> getString(R.string.setting_runtime_proxy_value_direct)
+            RuntimeDownloadConfig.isDefault(this) ||
+                current.equals(RuntimeDownloadConfig.DEFAULT_PROXY.trimEnd('/'), ignoreCase = true) ->
+                getString(R.string.setting_runtime_proxy_value_default)
+            else -> getString(R.string.setting_runtime_proxy_value_custom, current)
+        }
+    }
+
+    /**
+     * 运行时下载代理编辑框（v1.4.21）。
+     *
+     * 运行时 zip 与签名索引都从 GitHub Releases 取；默认 gh-proxy.org，
+     * 国内网络不用先等一轮直连超时。用户可换自建镜像，或留空直连。
+     */
+    private fun showRuntimeProxyDialog() {
+        val current = RuntimeDownloadConfig.proxy(this)
+        val input = EditText(this).apply {
+            setText(current)
+            hint = RuntimeDownloadConfig.DEFAULT_PROXY
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
+            setSingleLine()
+            setSelection(text.length)
+        }
+        val tip = TextView(this).apply {
+            text = getString(
+                R.string.setting_runtime_proxy_dialog_hint,
+                RuntimeDownloadConfig.DEFAULT_PROXY,
+            )
+            textSize = 12f
+            setTextColor(getColor(R.color.text_secondary))
+            setPadding(0, dp(8), 0, 0)
+            setLineSpacing(dp(2).toFloat(), 1f)
+        }
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(24), dp(12), dp(24), dp(4))
+            addView(input)
+            addView(tip)
+        }
+
+        val dialog = AlertDialog.Builder(this)
+            .setTitle(R.string.setting_runtime_proxy)
+            .setView(box)
+            .setPositiveButton(android.R.string.ok, null)
+            .setNeutralButton(R.string.setting_runtime_proxy_reset, null)
+            .setNegativeButton(android.R.string.cancel, null)
+            .create()
+
+        dialog.setOnShowListener {
+            dialog.window?.setBackgroundDrawableResource(R.drawable.bg_dialog_rounded)
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val raw = input.text.toString()
+                if (!RuntimeDownloadConfig.isValid(raw)) {
+                    input.error = getString(R.string.setting_runtime_proxy_invalid)
+                    return@setOnClickListener
+                }
+                RuntimeDownloadConfig.setProxy(this, raw)
+                refreshRuntimeProxyRow()
+                Toast.makeText(
+                    this, getString(R.string.setting_runtime_proxy_saved), Toast.LENGTH_SHORT,
+                ).show()
+                dialog.dismiss()
+            }
+            dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener {
+                RuntimeDownloadConfig.setProxy(this, null)
+                refreshRuntimeProxyRow()
+                Toast.makeText(
+                    this, getString(R.string.setting_runtime_proxy_reset_done), Toast.LENGTH_SHORT,
+                ).show()
+                dialog.dismiss()
+            }
+        }
+        dialog.show()
     }
 
     // ================= 显示：页面缩放 =================

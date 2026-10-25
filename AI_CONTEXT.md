@@ -2218,3 +2218,18 @@ URL: https://github.com/Soodok/Deepseek-Harness-Local-Android/releases/tag/v1.4.
 - **full → noruntime 覆盖**：同一 release 签名下 `adb install -r` 完整包覆盖 noruntime 成功；App 复用已下载运行时，引擎 Healthy，SSH 工作区入口仍在。
 - MuMu 侧最终状态：v1.4.19 完整包 + 已下载 `runtime-x86_64` + hardssh 0.2.13；未清除用户数据。
 
+---
+
+## v1.4.21 运行时下载代理与安装并发修复（2026-10-25，未发布）
+
+### 问题
+- 关于页「运行时更新」偶发 `runtime install already in progress`。
+- 根因：`RuntimeInstaller.installFromIndex()` 用进程级 `installing` 布尔量做 `check()` 互斥；该标志在引擎首启自动安装期间也为 true。用户在首启下载期间触发更新，或安装中再点一次（About 行会重新 check → 再次可安装），就会直接抛英文异常。且 `stop()` 只 cancel 不 join，首启的阻塞 IO 安装仍可能占着标志。
+- About 行自身没有防重入：第一次点击启动安装后，再点会走 check，check 完 pending 又变成「可安装」，第三次点击再次进入安装器。
+
+### 修复
+- `RuntimeInstaller` 增加进程级 `INSTALL_LOCK`：`ensureInstalled` 与 `installFromIndex` 串行，后到者等待而非报错；`installing` 保留给扩展中心做「装配中不要装扩展」判断。
+- 关于页增加 `runtimeInstalling` + `RuntimeInstaller.installing` 双重防重，重复点击提示「运行时正在安装，请稍候再试」。
+- 新增 `RuntimeDownloadConfig`：默认 `https://gh-proxy.org/`；设置 → 扩展 → 运行时下载代理可改前缀或留空直连。运行时 zip 与签名索引统一「代理优先、直连兜底」，已代理地址不二次包装；用户显式关闭代理时剔除 MANIFEST/索引里预置的镜像地址。
+- 首启 noruntime 下载同样读取该配置，不再依赖 MANIFEST 里的 `urls` 顺序先等直连超时。
+

@@ -474,6 +474,16 @@
     <string name="voice_send_failed">发送失败：%1$s</string>
         <string name="setting_lan_web">局域网访问 WebUI</string>
     <string name="setting_lan_web_sub">让同一网络下的电脑/平板用原生界面连上本机引擎。默认关闭。</string>
+    <string name="setting_runtime_proxy">运行时下载代理</string>
+    <string name="setting_runtime_proxy_sub">默认 gh-proxy.org；国内直连 GitHub 经常失败</string>
+    <string name="setting_runtime_proxy_value_default">默认 · gh-proxy.org（国内网络推荐）</string>
+    <string name="setting_runtime_proxy_value_direct">直连 GitHub（不使用代理）</string>
+    <string name="setting_runtime_proxy_value_custom">自定义 · %1$s</string>
+    <string name="setting_runtime_proxy_dialog_hint">运行时与更新索引都从这里下载。留空表示直连 GitHub；默认 %1$s。只支持前缀式代理（{代理}/{GitHub 地址}）。</string>
+    <string name="setting_runtime_proxy_invalid">代理地址无效，请填写 http(s) 地址</string>
+    <string name="setting_runtime_proxy_saved">下载代理已保存</string>
+    <string name="setting_runtime_proxy_reset">恢复默认</string>
+    <string name="setting_runtime_proxy_reset_done">已恢复默认代理</string>
     <string name="lan_web_consent">开启后，本机上这个具备完整权限的 AI（可读写文件、执行命令、控制屏幕）将对当前网络内所有设备开放。\n\n请只在可信网络（如家里 Wi-Fi）下使用。任何能访问该地址的人都可以控制这台手机，直到你关掉这个开关。</string>
     <string name="lan_dialog_title">局域网访问已开启</string>
     <string name="lan_dialog_code_label">访问验证码（点击可复制）</string>
@@ -622,4 +632,5 @@
     <string name="about_runtime_installing">正在安装运行时… %1$d%%</string>
     <string name="about_runtime_installed">运行时已安装，正在重启引擎</string>
     <string name="about_runtime_no_pin">无法获取已签名的运行时索引</string>
+    <string name="about_runtime_busy">运行时正在安装，请稍候再试</string>
 </resources>

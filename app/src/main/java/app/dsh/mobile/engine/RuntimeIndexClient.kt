@@ -44,7 +44,7 @@ object RuntimeIndexClient {
     /**
      * 解析索引并按 ABI 取条目。
      * @param exactVersion 指定时优先精确匹配（tag/preview 构建时已知版本）；找不到回退到最新。
-     * @param proxyBase 可选前缀代理（如 https://gh-proxy.org/），索引请求同样走它。
+     * @param proxyBase 可选前缀代理（如 https://gh-proxy.org/），索引请求优先走它，直连作兜底。
      */
     fun resolve(
         ctx: Context,
@@ -55,8 +55,8 @@ object RuntimeIndexClient {
         currentVersionCode: Int,
     ): Entry? = runCatching {
         val base = indexUrl?.takeIf { it.isNotBlank() } ?: (RepoConfig.RELEASES_LATEST + "/runtime-index.json")
-        val urls = mutableListOf(base)
-        if (!proxyBase.isNullOrBlank()) urls.add(proxyBase.trimEnd('/') + "/" + base)
+        // 代理优先：国内直连 GitHub 往往先卡 15–20s 才回退，等于白等一轮。
+        val urls = RuntimeDownloadConfig.orderUrls(listOf(base), proxyBase.orEmpty())
 
         var lastError: Exception? = null
         for (u in urls) {
