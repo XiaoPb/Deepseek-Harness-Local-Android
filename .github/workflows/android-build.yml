@@ -253,6 +253,24 @@ jobs:
         with:
           gradle-version: "8.9"
 
+      # 预装 CMake：此前 configureCMakeDebug 阶段由 Gradle 触发的 sdkmanager 现场
+      # 自动安装曾因网络抖动下载出损坏的包（"Error on ZipFile unknown archive"）
+      # 导致整条 leg 失败；这里提前带重试装好，Gradle 就不再构建中现场拉取。
+      - name: 预装 CMake 3.22.1（带重试）
+        run: |
+          for i in 1 2 3 4 5; do
+            if sdkmanager --install "cmake;3.22.1" > /tmp/sdkmanager-cmake.log 2>&1; then
+              echo "cmake;3.22.1 installed (attempt $i)"
+              ls "$ANDROID_HOME/cmake/3.22.1/bin" || true
+              exit 0
+            fi
+            echo "::warning::sdkmanager install attempt $i failed, retrying in 15s..."
+            cat /tmp/sdkmanager-cmake.log || true
+            sleep 15
+          done
+          echo "::error::failed to install cmake;3.22.1 after 5 attempts"
+          exit 1
+
       - name: tag 构建必须有 release 签名
         if: startsWith(github.ref, 'refs/tags/v') && env.RELEASE_STORE_PASSWORD == ''
         run: |
