@@ -258,8 +258,14 @@ jobs:
       # 导致整条 leg 失败；这里提前带重试装好，Gradle 就不再构建中现场拉取。
       - name: 预装 CMake 3.22.1（带重试）
         run: |
+          SDKM="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          [ -x "$SDKM" ] || SDKM="$(command -v sdkmanager || true)"
+          if [ -z "$SDKM" ]; then
+            echo "::error::sdkmanager not found under ANDROID_HOME=$ANDROID_HOME"
+            exit 1
+          fi
           for i in 1 2 3 4 5; do
-            if sdkmanager --install "cmake;3.22.1" > /tmp/sdkmanager-cmake.log 2>&1; then
+            if "$SDKM" --install "cmake;3.22.1" > /tmp/sdkmanager-cmake.log 2>&1; then
               echo "cmake;3.22.1 installed (attempt $i)"
               ls "$ANDROID_HOME/cmake/3.22.1/bin" || true
               exit 0
