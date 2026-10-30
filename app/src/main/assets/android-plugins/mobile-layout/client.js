@@ -13,9 +13,12 @@
  *      html[data-dshm-mode="mobile"] 下生效，退出即恢复官方默认布局。
  *   3. 给官方 AppFrame 打 data-dshm-* 锚点，后续阶段只用自有属性写 CSS，
  *      不依赖官方 CSS Modules 哈希类名。锚点缺失时回退默认布局并 warn 一次。
- *   4. 左侧栏在手机竖屏下改为抽屉：会话头左侧注册 ☰，shell.overlay 承担
- *      遮罩、左缘手势与全局面板兜底入口；开合统一走 ctx.layout.toggleSidebar()，
- *      状态以 frame 的 data-sidebar-collapsed 为唯一事实来源。
+ *   4. 左侧栏在手机竖屏下改为抽屉：入口只有左缘手势（无按键，避免遮挡
+ *      子页面自身的返回 / 页头控件）；手势由 bindDrawerGesture 常驻 window
+ *      捕获阶段监听（不随槽位 / 页面卸载，任何插件面板页都可用），跟手拖拽
+ *      + 松手吸附；shell.overlay 承担遮罩。开合统一走
+ *      ctx.layout.toggleSidebar()，状态以 frame 的 data-sidebar-collapsed
+ *      为唯一事实来源。
  *
  * 失败策略：与 hardssh / mobile-compose 客户端一致 —— 任何 DOM 失败只
  * console.warn，绝不上抛（web shell 会在插件 apply 抛错时令整个启动失败）。
@@ -29,7 +32,7 @@ window.__ModuleLoader__.load({
 
     const react = require('react');
 
-    const VERSION = '0.1.14';
+    const VERSION = '0.2.8';
     const MODE_MOBILE = 'mobile';
     const MODE_DEFAULT = 'default';
 
@@ -347,7 +350,6 @@ window.__ModuleLoader__.load({
     // ---- 文案（跟随 DSH 语言，缺省英文） ----
     const STRINGS = {
       zh: {
-        menu: '打开侧栏',
         close: '关闭',
         newSession: '新建',
         sessions: '会话',
@@ -366,7 +368,6 @@ window.__ModuleLoader__.load({
         back: '返回',
       },
       en: {
-        menu: 'Open sidebar',
         close: 'Close',
         newSession: 'New',
         sessions: 'Sessions',
@@ -452,6 +453,117 @@ window.__ModuleLoader__.load({
       const w = Number(width);
       if (!(w > 0)) return 96;
       return Math.max(64, Math.min(200, Math.round(w * 0.4)));
+    }
+
+    /**
+     * 手势横向意图确认阈值（CSS px）。
+     *
+     * 位移达到它就锁定本次手势的方向（此后只做触发阈值的等待，不再重新
+     * 判竖滑）。提前到 24px（触发阈值 48 的一半）是因为部分页面会在
+     * touchstart 上 preventDefault，move 的派发随时可能被截断——意图确认
+     * 得越早，手势越不容易被页面吃掉。
+     */
+    const SWIPE_ARM_PX = 24;
+
+    /**
+     * 横向滚动容器判定指标（纯函数）。
+     *
+     * @param {{scrollWidth:number, clientWidth:number, overflowX:string}} metrics
+     * @returns {boolean} 该元素是否「真的能横滚」（宽出 4px 以上且 overflow-x 可滚）
+     */
+    function isHorizScrollerMetrics(metrics) {
+      if (!metrics) return false;
+      const scrollWidth = Number(metrics.scrollWidth);
+      const clientWidth = Number(metrics.clientWidth);
+      if (!(scrollWidth > clientWidth + 4)) return false;
+      const overflowX = String(metrics.overflowX || '');
+      return overflowX === 'auto' || overflowX === 'scroll';
+    }
+
+    /**
+     * 横滚容器是否还能吞掉这个方向的手势（纯函数，作用于元素指标）。
+     *
+     * 手指右滑（dx>0）想让内容往右滚，需要 scrollLeft 还有余量；左滑看是否
+     * 还没到右端。滚到边界后容器不再消费手势，抽屉接管——终端 / 宽表整页
+     * 也能在最左端起手右滑开抽屉。
+     *
+     * @param {{scrollLeft:number, clientWidth:number, scrollWidth:number}} el
+     * @param {number} dx 带符号位移（右正左负）
+     * @returns {boolean} true = 让路给内容横滚
+     */
+    function scrollerConsumes(el, dx) {
+      if (!el) return false;
+      const scrollLeft = Number(el.scrollLeft) || 0;
+      const clientWidth = Number(el.clientWidth) || 0;
+      const scrollWidth = Number(el.scrollWidth) || 0;
+      if (dx > 0) return scrollLeft > 0;
+      return scrollLeft + clientWidth < scrollWidth - 1;
+    }
+
+    /**
+     * 抽屉手势判定（纯函数）。
+     *
+     * 输入一次滑动的起点、位移与上下文，输出该手势应触发的动作：
+     *   'open'  左起手区右滑且抽屉未开；
+     *   'close' 抽屉已开时的左滑（不限起手位置，遮罩之外任何地方都能收）；
+     *   'none'  竖滑 / 距离不足 / 起手出区 / 容器还要横滚 / 浮层挡着。
+     *
+     * @param {object} input
+     * @param {number} input.dx 横向位移（CSS px，右正左负）
+     * @param {number} input.dy 纵向位移（CSS px）
+     * @param {number} input.startX 起手 x 坐标
+     * @param {number} input.width 布局视口宽
+     * @param {boolean} input.drawerOpen 抽屉当前是否展开
+     * @param {boolean} input.blocked 浮层 / 设置页等拦截
+     * @param {boolean} input.hScrollerConsumes 起手容器在该方向是否还能滚
+     * @param {number} [min] 触发位移阈值，缺省 {@link SWIPE_MIN}
+     * @returns {'open'|'close'|'none'}
+     */
+    function decideDrawerGesture(input, min) {
+      const data = input || {};
+      const dx = Number(data.dx);
+      const dy = Number(data.dy);
+      const limit = typeof min === 'number' ? min : SWIPE_MIN;
+      if (!Number.isFinite(dx) || !Number.isFinite(dy)) return 'none';
+      if (data.blocked) return 'none';
+      const horizontal = Math.abs(dx);
+      if (horizontal < limit) return 'none';
+      // 只认「横向明显大于纵向」：竖滑属于内容滚动。
+      if (Math.abs(dy) > horizontal * 0.72) return 'none';
+      if (data.hScrollerConsumes) return 'none';
+      if (dx > 0) {
+        if (data.drawerOpen) return 'none';
+        const startX = Number(data.startX);
+        if (!Number.isFinite(startX)) return 'none';
+        if (startX > drawerStartLimit(data.width)) return 'none';
+        return 'open';
+      }
+      return data.drawerOpen ? 'close' : 'none';
+    }
+
+    /** 松手吸附：位移比例阈值（不足此比例回到起点一侧）。 */
+    const SETTLE_RATIO = 0.38;
+    /** 松手吸附：速度阈值（px/ms），达到即按甩动方向吸附。 */
+    const SETTLE_VELOCITY = 0.35;
+
+    /**
+     * 松手后抽屉吸附到哪一侧（纯函数）。
+     *
+     * 甩动优先（快速轻扫不必拖过半屏），否则按松手时的位置比例：比例 ≥
+     * {@link SETTLE_RATIO} 吸附展开，否则收回。两个阈值都取偏小的值——
+     * 手机上「拖出 1/3 屏 + 稍快」就该算明确的开抽屉意图。
+     *
+     * @param {boolean} wasOpen 拖拽开始时抽屉是否展开
+     * @param {number} progress 松手时的位置比例（0 收起 → 1 展开）
+     * @param {number} velocity 松手速度（px/ms，右正左负）
+     * @returns {boolean} true = 吸附到展开
+     */
+    function drawerSettle(wasOpen, progress, velocity) {
+      const p = Number(progress);
+      const v = Number(velocity);
+      const ratio = Number.isFinite(p) ? p : wasOpen ? 1 : 0;
+      if (Number.isFinite(v) && Math.abs(v) >= SETTLE_VELOCITY) return v > 0;
+      return ratio >= SETTLE_RATIO;
     }
 
     /**
@@ -569,7 +681,6 @@ window.__ModuleLoader__.load({
       syncStatsBar();
       syncHero();
       syncComposerEdge();
-      syncPageHead();
       tagStatsDialog();
     }
 
@@ -852,200 +963,6 @@ window.__ModuleLoader__.load({
       html.style.removeProperty('--dshm-hero-shift');
     }
 
-    /**
-     * 在页头内找标题文本叶子（最上层的纯文本块）。
-     *
-     * 不依赖类名：从页头向下 BFS，跳过交互控件的祖先（按钮文案不是标题），
-     * 返回第一个无元素子节点、有文本、靠近内容区左缘的块。插件页的
-     * `pageHeading > h1`、自动化任务的 `h1`、SSH 工作区的 `h2` 都命中。
-     * @returns {{node: Element, box: DOMRect}|null}
-     */
-    function findPageTitle(head, centerRect) {
-      const queue = [{ node: head, depth: 0 }];
-      while (queue.length) {
-        const item = queue.shift();
-        if (item.depth > 4) continue;
-        for (const child of item.node.children) {
-          const box = child.getBoundingClientRect();
-          if (!box.width || !box.height) continue;
-          if (box.top > 100 || box.left > centerRect.left + 120) continue;
-          if (!(child.textContent || '').trim()) continue;
-          const interactive = child.querySelector('button, a, input, textarea, select, [contenteditable="true"], [role="button"], [role="textbox"]');
-          if (interactive || child.firstElementChild) {
-            queue.push({ node: child, depth: item.depth + 1 });
-            continue;
-          }
-          return { node: child, box };
-        }
-      }
-      return null;
-    }
-
-    /**
-     * 全局面板（插件、设置、自动化任务、SSH 工作区等）没有会话头，浮动侧栏键
-     * 由 shell.overlay 兜底。这里找出页面顶部自己的页头行，把侧栏键贴到标题
-     * 左缘（36px 键 + 8px 间距，标题本身不动），并垂直对齐标题行中位。
-     *
-     * 判定全部走几何，不用官方类名：页头行 = 贴近 center 顶端、横向占大半、
-     * 高度 14–160（页头可以只有一行 20px 标题，也可以带副标题到 80px）。
-     * 标题 = 页头内最上层纯文本叶子。
-     */
-
-    /**
-     * 浮动侧栏键的水平定位（纯函数）。
-     *
-     * 键贴标题左缘：36px 键宽 + 8px 间距，即 left = 标题左缘 - 44；标题本身
-     * 不再平移（旧实现把标题右移最多 48px 给左上角的键让位，键和标题之间
-     * 会留出一段无关空白）。标题太靠左（左缘 < 52，键放不下）时才退回旧
-     * 兜底：键固定在 8px，标题右移让位。
-     *
-     * @param {number} rawLeft 标题左缘（须先扣除已写入的相对偏移，见 syncPageHead）
-     * @returns {{ left: number, shift: number }} 键的 left 与标题需平移的像素
-     */
-    function floatMenuLeft(rawLeft) {
-      const raw = Number(rawLeft) || 0;
-      if (raw >= 52) return { left: raw - 44, shift: 0 };
-      return { left: 8, shift: Math.max(0, Math.min(48, 52 - raw)) };
-    }
-    function syncPageHead() {
-      const html = document.documentElement;
-      const center = centerElement();
-      if (!center) {
-        clearPageHead();
-        return;
-      }
-      // 会话头里的 ☰ 可见时说明当前是会话页（或面板背后的会话头仍可见），
-      // 由 header leading 的 ☰ 负责；只有面板页才启用浮动键。
-      const menuBtn = document.querySelector('.dshm-menu-btn');
-      const menuBox = menuBtn ? menuBtn.getBoundingClientRect() : null;
-      const headerVisible = Boolean(menuBox && menuBox.width && menuBox.height);
-      if (state.mode !== MODE_MOBILE || (headerVisible && !state.panelActive)) {
-        clearPageHead();
-        return;
-      }
-      const centerRect = center.getBoundingClientRect();
-      let head = null;
-      const queue = [{ node: center, depth: 0 }];
-      while (queue.length && !head) {
-        const item = queue.shift();
-        if (item.depth >= 6) continue;
-        for (const child of item.node.children) {
-          const box = child.getBoundingClientRect();
-          // 官方面板外面常套着 0x0 的布局包装层，必须继续下钻才能找到页头。
-          if (box.width && box.height) {
-            const topGap = box.top - centerRect.top;
-            const rowLike =
-              topGap <= 24 &&
-              box.height >= 14 &&
-              box.height <= 160 &&
-              box.width >= centerRect.width * 0.5 &&
-              !child.querySelector('input, textarea, select, [contenteditable="true"], [role="textbox"], [role="searchbox"]');
-            if (rowLike && (child.textContent || '').trim()) {
-              head = child;
-              break;
-            }
-          }
-          // 只下钻 0x0 包装层与顶部条带，避免在长列表里逐行量尺寸。
-          if (!box.height || box.top <= 90) queue.push({ node: child, depth: item.depth + 1 });
-        }
-      }
-      if (!head) {
-        // 页头滚出判定窗口（页面滚动后）：此前出现过页头就隐藏侧栏键，
-        // 滚回来由滚动跟踪重新定位回显；该页从未有过页头则维持默认兜底位。
-        if (pageHeadSeen) html.setAttribute(ATTR_FLOAT_HIDDEN, '');
-        else clearPageHead();
-        return;
-      }
-      const title = findPageTitle(head, centerRect);
-      const titleBox = title ? title.box : head.getBoundingClientRect();
-      // 滚动隐藏：页头行相对 center 顶部的位移（topGap）静止时 ≥0（探测
-      // 判据本来就要求 ≤24），滚动后变负——topGap < -4 即视为页面滚过，
-      // 键随标题隐藏，滚回顶部自动回显。不用绝对阈值：不同设备 / 页面静止
-      // 时标题顶从 8px 到 56px 都有（MuMu 实测 8/24/44，K70 实测 28），
-      // 绝对阈值会把静止态误判成已滚动。吸顶页头 topGap 恒 0，键保持可见。
-      const headGap = head.getBoundingClientRect().top - centerRect.top;
-      if (headGap < -4) {
-        html.setAttribute(ATTR_FLOAT_HIDDEN, '');
-        return;
-      }
-      html.removeAttribute(ATTR_FLOAT_HIDDEN);
-      pageHeadSeen = true;
-      // 上一次写入的相对偏移会反映在 rect 里，必须先扣掉，否则「已平移 → 无偏移
-      // → 还原 → 再平移」会来回抖动。
-      const applied = (node) => {
-        let sum = 0;
-        let cur = node;
-        while (cur && cur !== head && cur !== document.documentElement) {
-          sum += parseFloat(getComputedStyle(cur).left) || 0;
-          cur = cur.parentElement;
-        }
-        return sum;
-      };
-      const rawLeft = Math.round(titleBox.left - applied(title ? title.node : head));
-      // 侧栏键贴标题左缘（36px 键 + 8px 间距），标题尽量不动；标题太靠左
-      // （左缘 < 52）才退回「标题右移让位」的兜底。只做相对偏移，不压缩
-      // 标题行宽度（曾用整行内边距导致副标题换行、标题行 80→128 抖动）。
-      const placement = floatMenuLeft(rawLeft);
-      const shift = placement.shift;
-      const shiftValue = shift + 'px';
-      if (shift) {
-        if (html.style.getPropertyValue('--dshm-page-head-shift') !== shiftValue) {
-          html.style.setProperty('--dshm-page-head-shift', shiftValue);
-        }
-        const marked = new Set();
-        let scanned = 0;
-        for (const node of head.querySelectorAll('*')) {
-          if (marked.size >= 6 || scanned >= 60) break;
-          scanned += 1;
-          const box = node.getBoundingClientRect();
-          if (!box.width || !box.height) continue;
-          if (Math.abs(Math.round(box.left - applied(node)) - rawLeft) > 1) continue;
-          // 已在更外层标记过就不再重复标记，避免嵌套块被平移两次。
-          let parent = node.parentElement;
-          let covered = false;
-          while (parent && parent !== head) {
-            if (marked.has(parent)) {
-              covered = true;
-              break;
-            }
-            parent = parent.parentElement;
-          }
-          if (covered) continue;
-          node.setAttribute(ATTR_PAGE_SHIFT, '');
-          marked.add(node);
-        }
-        // 上一次标记过、这次不再贴合左缘的块要还原。
-        for (const node of head.querySelectorAll('[' + ATTR_PAGE_SHIFT + ']')) {
-          if (!marked.has(node)) node.removeAttribute(ATTR_PAGE_SHIFT);
-        }
-      } else {
-        for (const node of head.querySelectorAll('[' + ATTR_PAGE_SHIFT + ']')) node.removeAttribute(ATTR_PAGE_SHIFT);
-        html.style.removeProperty('--dshm-page-head-shift');
-      }
-      if (!head.hasAttribute(ATTR_PAGE_HEAD)) head.setAttribute(ATTR_PAGE_HEAD, '');
-      const top = Math.max(0, Math.round(titleBox.top + (titleBox.height - 36) / 2));
-      const topValue = top + 'px';
-      if (html.style.getPropertyValue('--dshm-float-menu-top') !== topValue) {
-        html.style.setProperty('--dshm-float-menu-top', topValue);
-      }
-      // 水平：贴标题左缘；兜底分支（标题右移）时 floatMenuLeft 给 8px。
-      const leftValue = Math.round(placement.left) + 'px';
-      if (html.style.getPropertyValue('--dshm-float-menu-left') !== leftValue) {
-        html.style.setProperty('--dshm-float-menu-left', leftValue);
-      }
-    }
-
-    function clearPageHead() {
-      const html = document.documentElement;
-      document.querySelectorAll('[' + ATTR_PAGE_HEAD + ']').forEach((node) => node.removeAttribute(ATTR_PAGE_HEAD));
-      document.querySelectorAll('[' + ATTR_PAGE_SHIFT + ']').forEach((node) => node.removeAttribute(ATTR_PAGE_SHIFT));
-      html.removeAttribute(ATTR_FLOAT_HIDDEN);
-      pageHeadSeen = false;
-      html.style.removeProperty('--dshm-page-head-shift');
-      html.style.removeProperty('--dshm-float-menu-top');
-      html.style.removeProperty('--dshm-float-menu-left');
-    }
-
     function markChip(button, attr, short) {
       if (!button.hasAttribute(attr)) button.setAttribute(attr, '');
       if (button.getAttribute('data-dshm-short') !== short) button.setAttribute('data-dshm-short', short);
@@ -1072,7 +989,6 @@ window.__ModuleLoader__.load({
       mode: MODE_DEFAULT,
       anchored: false,
       drawerOpen: false,
-      headerLeading: false,
       rightbarFullscreen: false,
       panelActive: false,
       sheet: null,
@@ -1122,6 +1038,11 @@ window.__ModuleLoader__.load({
     const ATTR_RIGHTBAR = 'data-dshm-rightbar';
     const ATTR_BOTTOM = 'data-dshm-bottom';
     const ATTR_POPOVER = 'data-dshm-popover';
+    /**
+     * 手势让路标记：任何子树打上它，抽屉左滑手势一律不接管。
+     * 给自带整页手势的第三方插件留的逃生口（读写都走 closest）。
+     */
+    const ATTR_SWIPE_IGNORE = 'data-dshm-swipe-ignore';
     /** 模型 / 权限选择器（带搜索框的贴底浮层）与其中选项段的标记。 */
     const ATTR_PICKER = 'data-dshm-picker';
     const ATTR_PICKER_DETAIL = 'data-dshm-picker-detail';
@@ -1145,12 +1066,6 @@ window.__ModuleLoader__.load({
     /** 空会话工作区 / 模式选择行的官方菜单，改向上弹出。 */
     const ATTR_MENU_UP = 'data-dshm-menu-up';
     const ATTR_HERO = 'data-dshm-hero';
-    const ATTR_PAGE_HEAD = 'data-dshm-page-head';
-    const ATTR_PAGE_SHIFT = 'data-dshm-page-shift';
-    /** 页头滚出可视区时隐藏浮动侧栏键（滚动跟踪见 syncPageHead / onDocScroll）。 */
-    const ATTR_FLOAT_HIDDEN = 'data-dshm-float-menu-hidden';
-    /** 当前面板页是否出现过页头：出现过才在滚动隐藏后「回显」，无头页面保持默认兜底位。 */
-    let pageHeadSeen = false;
     /** 加号宫格分页：容器标记、每页首项的吸附点。 */
     const ATTR_ADD_PAGED = 'data-dshm-add-paged';
     const ATTR_ADD_PAGE_START = 'data-dshm-add-page-start';
@@ -1212,7 +1127,7 @@ window.__ModuleLoader__.load({
     }
 
     function clearAnchors(doc) {
-      [ATTR_FRAME, ATTR_SIDEBAR, ATTR_CENTER, ATTR_RIGHTBAR, ATTR_BOTTOM, ATTR_POPOVER, ATTR_PICKER, ATTR_PICKER_DETAIL, ATTR_PICKER_CHECK, ATTR_PERM_CHIP, ATTR_PERM_DANGER, ATTR_MODEL_CHIP, ATTR_CHROME_BTN, ATTR_ADD_CHIP, ATTR_COMPOSER_PAD, ATTR_COMPOSER_FLAT, ATTR_COMPOSER_EDGE, ATTR_STATS, ATTR_STATS_HOST, ATTR_STATS_DIALOG, ATTR_HEADER_MENU, ATTR_HEADER_MENU_HOST, ATTR_MENU_UP, ATTR_HERO, ATTR_PAGE_HEAD, ATTR_PAGE_SHIFT].concat(SETTINGS_ATTRS, [ATTR_ADD_PAGED, ATTR_ADD_PAGE_START, ATTR_ADD_TINT]).forEach((attr) => {
+      [ATTR_FRAME, ATTR_SIDEBAR, ATTR_CENTER, ATTR_RIGHTBAR, ATTR_BOTTOM, ATTR_POPOVER, ATTR_PICKER, ATTR_PICKER_DETAIL, ATTR_PICKER_CHECK, ATTR_PERM_CHIP, ATTR_PERM_DANGER, ATTR_MODEL_CHIP, ATTR_CHROME_BTN, ATTR_ADD_CHIP, ATTR_COMPOSER_PAD, ATTR_COMPOSER_FLAT, ATTR_COMPOSER_EDGE, ATTR_STATS, ATTR_STATS_HOST, ATTR_STATS_DIALOG, ATTR_HEADER_MENU, ATTR_HEADER_MENU_HOST, ATTR_MENU_UP, ATTR_HERO].concat(SETTINGS_ATTRS, [ATTR_ADD_PAGED, ATTR_ADD_PAGE_START, ATTR_ADD_TINT]).forEach((attr) => {
         doc.querySelectorAll('[' + attr + ']').forEach((node) => node.removeAttribute(attr));
       });
       edgeState.node = null;
@@ -1768,6 +1683,80 @@ window.__ModuleLoader__.load({
       }
     }
 
+    // ---- 选择器（模型 / 权限）搜索框焦点守卫 ----
+    /**
+     * 打开模型 / 权限选择器时官方会 autoFocus 顶部搜索框，手机端直接拉起
+     * 软键盘，把刚弹出的选项列表盖掉大半。守卫策略：搜索框在没有用户
+     * 触碰（pointerdown 落在搜索框本身）的情况下拿到焦点，立即 blur；
+     * 用户主动点搜索框过滤的正常路径不受影响。
+     *
+     * 两条路径互补：
+     * 1. 挂载 autofocus 发生在 observer 打标记之前，focusin 时还查不到
+     *    ATTR_PICKER——由 tagComposerMenus 选择器分支的「新开一次」检测兜住
+     *    （同一微任务帧内 blur，Android 键盘来不及拉起，见 imeFocusGuard）；
+     * 2. 之后官方异步 refocus / 重渲染回焦，焦点已带标记，由全局 focusin
+     *    守卫收掉。
+     */
+    const pickerFocusGuard = { lastTouch: 0, openNode: null, installed: false };
+
+    /** 用户是否刚碰过选择器搜索框（500ms 内的手势视为主动聚焦意图）。 */
+    function pickerSearchRecentlyTouched() {
+      return Date.now() - pickerFocusGuard.lastTouch < 500;
+    }
+
+    /** 非用户意图的自动落焦才收（500ms 内有触碰放行）。返回是否 blur 了。 */
+    function blurInputIfAuto(input) {
+      if (document.activeElement !== input) return false;
+      if (pickerSearchRecentlyTouched()) return false;
+      if (typeof input.blur !== 'function') return false;
+      input.blur();
+      return true;
+    }
+
+    /** 焦点在选择器根内且非用户意图时收掉。返回是否真的 blur 了。 */
+    function blurPickerSearchAuto(root) {
+      const active = document.activeElement;
+      if (!active || active.tagName !== 'INPUT' || !root.contains(active)) return false;
+      return blurInputIfAuto(active);
+    }
+
+    /**
+     * 安装全局守卫（bootstrap 一次）：pointerdown 记录用户落在搜索框上的
+     * 手势时间戳；focusin 捕获阶段收掉非用户意图的搜索框焦点。
+     *
+     * 识别两条线：
+     * - 带 ATTR_PICKER 标记的选择器根（tagComposerMenus 打的）；
+     * - placeholder 以「搜索 / Search」开头的输入框——空态选择器（如模型
+     *   列表为空时「暂无可用模型」）没有 [role=listbox] 选项结构、打不上
+     *   标记（K70 实测官方 autoFocus 照样拉起软键盘），退而按搜索框语义
+     *   兜底识别。
+     *
+     * @param {Document} doc
+     */
+    function installPickerFocusGuard(doc) {
+      if (pickerFocusGuard.installed) return;
+      pickerFocusGuard.installed = true;
+      doc.addEventListener('pointerdown', (event) => {
+        const target = event.target;
+        const hit = target && target.closest
+          && target.closest('[data-dshm-picker] input, input[placeholder]');
+        if (hit && /^(搜索|search)/i.test(String(hit.getAttribute('placeholder') || '').trim())) {
+          pickerFocusGuard.lastTouch = Date.now();
+        }
+      }, true);
+      doc.addEventListener('focusin', (event) => {
+        const target = event.target;
+        if (!target || target.tagName !== 'INPUT' || !target.closest) return;
+        const pickerRoot = target.closest('[data-dshm-picker]');
+        if (pickerRoot) {
+          blurPickerSearchAuto(pickerRoot);
+          return;
+        }
+        const placeholder = String(target.getAttribute('placeholder') || '').trim();
+        if (/^(搜索|search)/i.test(placeholder)) blurInputIfAuto(target);
+      }, true);
+    }
+
     /**
      * 在空会话的工作区 / 模式选择行里找到与弹层横向对齐的展开中按钮。
      *
@@ -1797,6 +1786,9 @@ window.__ModuleLoader__.load({
         const drop = () => {
           node.removeAttribute(ATTR_POPOVER);
           node.removeAttribute(ATTR_PICKER);
+          // 守卫的「新开一次」检测随之复位：官方复用同一节点重开选择器时
+          // 也要再收一次 autofocus。
+          if (pickerFocusGuard.openNode === node) pickerFocusGuard.openNode = null;
         };
         if (!node.isConnected) {
           drop();
@@ -1912,6 +1904,13 @@ window.__ModuleLoader__.load({
           if (target.querySelector('input')) {
             if (!target.hasAttribute(ATTR_PICKER)) target.setAttribute(ATTR_PICKER, '');
             tagPickerOptions(target);
+            // 选择器新开一轮：收掉官方 autofocus 到搜索框上的焦点，防止
+            // 软键盘一开就盖住选项列表（用户点搜索框的正常路径放行，见
+            // installPickerFocusGuard 头注释里的两条互补路径）。
+            if (pickerFocusGuard.openNode !== target) {
+              pickerFocusGuard.openNode = target;
+              blurPickerSearchAuto(target);
+            }
             // 官方把宫格换成选择器（点「模型 / 权限」）时旧宫格节点直接消失，
             // 分页圆点还挂在 state 上；这里连节点状态一起撤。
             if (addPagingState.node && !addPagingState.node.isConnected) {
@@ -2868,12 +2867,633 @@ window.__ModuleLoader__.load({
       if (open) closeSheet();
       if (isDrawerOpen() === open) return;
       const layout = runtime.layout;
-      if (!layout || typeof layout.toggleSidebar !== 'function') return;
+      console.info('[dshm-gesture] REQUEST open=' + open + ' layout=' + (layout ? Object.keys(layout).join(',') : 'null')); // TEMP-DEBUG
+      if (!layout || typeof layout.toggleSidebar !== 'function') {
+        console.warn('[dshm-gesture] toggleSidebar 缺失，手势动作丢弃'); // TEMP-DEBUG
+        return;
+      }
       try {
         layout.toggleSidebar();
       } catch (error) {
         console.error('[dsh-mobile-layout] 切换侧栏失败：', error);
       }
+    }
+
+    /**
+     * 抽屉手势层：window 捕获阶段单点绑定，与页面 / 槽位生命周期解耦。
+     *
+     * 旧实现把手势挂在 shell.overlay 的 OverlayLayer 里，等于把「能不能左滑
+     * 开抽屉」绑在官方 React 槽位组件的挂载状态上：其它插件提供的面板页
+     * （main 槽位）只要自己消费触摸事件（stopPropagation / preventDefault，
+     * 终端页的 VS Code 组件栈就这么干）或整页横滚，冒泡阶段的监听就够不着，
+     * 表现为「换到插件页面左滑失灵」。
+     *
+     * 现在挂在 window 的捕获阶段：捕获先于一切目标处理器执行，任何层级的
+     * stopPropagation 都拦不住；也不依赖 shell.overlay 是否挂载。只要插件
+     * 活着、形态是手机，任何页面都能监听到。全部监听 passive：只观察，
+     * 不抢页面的默认行为。
+     *
+     * 判定走 decideDrawerGesture（纯函数）：左起手区右滑开、展开后任何
+     * 位置左滑收；横滚容器按「方向 + 是否到边界」让路（scrollerConsumes），
+     * 终端 / 宽表在最左端起手右滑也能开抽屉。
+     *
+     * 官方 toggleSidebar 是异步 React 提交，快速连滑两次会双翻（第一次的
+     * 目标被第二次 toggle 翻回去）；触发后 320ms 按 DOM 复核一次，只补
+     * 一次不重试。
+     *
+     * 调试：localStorage 设 dshm-debug=1，被拒绝的手势会打出结构化原因
+     * （SWIPE_IGNORE / RIGHTBAR_FULLSCREEN / BLOCKED_LAYER / TOO_VERTICAL /
+     * H_SCROLLER / OUT_OF_ZONE），现场一条日志即可定位。
+     *
+     * @param {Window} win 页面 window（测试可传 mock）
+     * @param {Document} doc 页面 document
+     * @returns {() => void} release：摘掉全部监听并复位状态
+     */
+    function bindDrawerGesture(win, doc) {
+      /** 本轮手势是否在跟踪（单指起手且未被静态拦截）。 */
+      let active = false;
+      /** 双通道按先到者去重：同一次手势 pointerdown 先于 touchstart 到达。 */
+      let source = '';
+      let pointerId = -1;
+      let touchId = -1;
+      let startX = 0;
+      let startY = 0;
+      /** 起手元素：让路判定（closest / 横滚祖先）要用。 */
+      let startTarget = null;
+      /** 已锁定的方向：1 右滑（开）、-1 左滑（收）、0 未定向。方向翻转会重判让路。 */
+      let armed = 0;
+      /** 定向时一次性判定：起手横滚容器在该方向是否还能滚。 */
+      let hConsume = false;
+      /** 起手时抽屉是否展开：跟手进度基准与松手吸附的「起点侧」。 */
+      let openAtStart = false;
+      /** 是否处于跟手阶段：抽屉 / 遮罩由手势引擎直接驱动（内联样式）。 */
+      let following = false;
+      /** 跟手用抽屉宽（CSS px），beginFollow 量一次。 */
+      let drawerWidth = 280;
+      /** 增量跟随基准：定向时的手指 x，progress 从 0 平滑起步。 */
+      let followBaseX = 0;
+      /** 当前跟手进度（0 收起 → 1 展开），updateFollow 刷新、endFollow 吸附。 */
+      let lastProgress = 0;
+      let moveCount = 0; // TEMP-DEBUG
+      let followSidebar = null;
+      /** 跟手遮罩：手势引擎自建（.dshm-drag-mask），不依赖 React 树。 */
+      let dragMask = null;
+      /** 跟手期间让位的官方 React 遮罩（.dshm-mask），松手后恢复。 */
+      let reactMask = null;
+      /** 兜底遮罩的抽屉状态观察：抽屉被任何途径收起时淡出并摘除。 */
+      let fallbackObserver = null;
+      /** 官方抽屉状态 → 位移变量同步 observer（bind 时挂，release 断开）。 */
+      let followObserver = null;
+      /** 吸附终态的内联样式清理计时。 */
+      let settleTimer = 0;
+      /** 遮罩交还官方 React 遮罩的轮询计时。 */
+      let maskSwapTimer = 0;
+      /** 速度采样（最近 8 个 {t, x}），松手时折算 px/ms。 */
+      let samples = [];
+      let reducedMotion = false;
+      let debugOn = false;
+      let recheckTimer = 0;
+      let released = false;
+
+      const clamp01 = (value) => {
+        const v = Number(value);
+        if (!Number.isFinite(v)) return 0;
+        return v < 0 ? 0 : v > 1 ? 1 : v;
+      };
+      const removeNode = (node) => {
+        try {
+          if (node && node.parentNode) node.parentNode.removeChild(node);
+        } catch (error) {
+          /* 节点已被官方重挂 / 移除 */
+        }
+      };
+      /** 抽屉位移（CSS %）写到 <html> 变量：官方同步清不到根元素上的变量。 */
+      const setDrawerX = (pct) => {
+        try {
+          doc.documentElement.style.setProperty('--dshm-drawer-x', pct + '%');
+        } catch (error) {
+          /* ignore */
+        }
+      };
+      /** 跟手 / 吸附期间变量归手势引擎管；空闲时随官方状态同步。 */
+      const syncDrawerX = () => {
+        if (following || settleTimer) return;
+        setDrawerX(isDrawerOpen() ? 0 : -104);
+      };
+      const debugLog = (reason) => {
+        if (!debugOn) return;
+        console.info('[dsh-mobile-layout] 抽屉手势忽略：' + reason);
+      };
+
+      /** 浮层 / 设置页开着时不起手势（与旧实现同一组条件）。 */
+      const blockedAtStart = () =>
+        getState().sheet !== null ||
+        getState().popoverOpen ||
+        Boolean(doc.querySelector('[' + ATTR_POPOVER + ']')) ||
+        settingsPanelOpen();
+
+      const overflowXOf = (node) => {
+        try {
+          return win.getComputedStyle(node).overflowX;
+        } catch (error) {
+          return '';
+        }
+      };
+
+      /** 起手点向上 6 层内找「真的能横滚」的容器（代码块 / 表格 / 终端视口）。 */
+      const horizScrollerOf = (node) => {
+        let cur = node instanceof win.Element ? node : null;
+        for (let i = 0; cur && i < 6; i += 1) {
+          if (
+            isHorizScrollerMetrics({
+              scrollWidth: cur.scrollWidth,
+              clientWidth: cur.clientWidth,
+              overflowX: overflowXOf(cur),
+            })
+          ) {
+            return cur;
+          }
+          cur = cur.parentElement;
+        }
+        return null;
+      };
+
+      const resetGesture = () => {
+        active = false;
+        source = '';
+        pointerId = -1;
+        touchId = -1;
+        startTarget = null;
+        armed = 0;
+        hConsume = false;
+      };
+
+      /** 触发后的复核：DOM 与手势目标不一致时只补一次 toggle。 */
+      const applyDrawerDecision = (open) => {
+        requestDrawer(open);
+        if (recheckTimer) win.clearTimeout(recheckTimer);
+        recheckTimer = win.setTimeout(() => {
+          recheckTimer = 0;
+          if (released) return;
+          if (getState().mode !== MODE_MOBILE) return;
+          if (isDrawerOpen() !== open) requestDrawer(open);
+        }, 320);
+      };
+
+      /**
+       * 进入跟手：抽屉 / 遮罩改由手势引擎直接驱动（CSS 变量）。
+       *
+       * 官方自己的拖拽约定是 data-dragging 关过渡、data-animating 统一读
+       * 缓动变量，这里复用同一语义：跟手期给 <html> 打 data-dshm-following
+       * （CSS 关过渡），松手吸附换 data-dshm-settling + 时长变量交还补间。
+       * 位移走 <html> 上的 --dshm-drawer-x 变量——官方 React / narrow-sidebar
+       * 插件会重写侧栏元素的内联 style（实测清掉内联 transform 导致抽屉
+       * 瞬间全弹一帧），根元素上的变量它们碰不到。遮罩用自建的
+       * .dshm-drag-mask（opacity 跟进度），跟手期间把官方 React 遮罩
+       * display:none 让位，避免双层叠加发黑。
+       */
+      const beginFollow = (open, baseX) => {
+        // openAtStart = 起手时抽屉的当前状态（吸附的起点侧、进度基准），
+        // 不是本次手势的目标方向——展开方向误设 true 会让进度公式
+        // （从展开态回拖：1 + delta/width）从第一帧就恒为全开。
+        openAtStart = isDrawerOpen();
+        // 增量跟随基准 = 定向时手指位置（起手区已走的距离不映射到位移）。
+        followBaseX = Number.isFinite(baseX) ? baseX : startX;
+        following = true;
+        lastProgress = openAtStart ? 1 : 0;
+        samples = [];
+        try {
+          reducedMotion = Boolean(
+            win.matchMedia && win.matchMedia('(prefers-reduced-motion: reduce)').matches,
+          );
+        } catch (error) {
+          reducedMotion = false;
+        }
+        // 减动效（MIUI 关过渡动画等宿主会被 Chromium 判成 reduce）只缩短
+        // 吸附补间，不禁跟手：拖拽是手指直接驱动的操作，不是装饰动画——
+        // K70（transition scale=0）实测禁跟手会导致抽屉瞬间全开。
+        followSidebar = doc.querySelector('[' + ATTR_SIDEBAR + ']');
+        console.info("[dshm-gesture] FOLLOW begin open=" + open + " base=" + Math.round(followBaseX) + " w=" + drawerWidth); // TEMP-DEBUG
+        if (followSidebar) {
+          const rect = followSidebar.getBoundingClientRect();
+          if (rect.width > 40) drawerWidth = rect.width;
+        }
+        // 跟手标记挂 <html>（关过渡 + 防官方同步干扰）；起点变量即当前态，
+        // 增量跟随从定向点平滑起步。
+        doc.documentElement.setAttribute('data-dshm-following', '');
+        // 状态先行（仅展开方向）：官方侧栏在 data-sidebar-collapsed 态渲染
+        // 成窄条图标模式（文字不挂载），跟手时只有 transform 在动、内容
+        // 一片空白，松手 toggleSidebar 后 React 才展开文字（真机实测）。
+        // 这里立即切到展开态让 React 提前挂载内容，视觉仍由变量逐帧驱动；
+        // 松手吸附若终态与先行态相反，applyDrawerDecision 会反向 toggle 校正。
+        // 收起方向不先行：保持展开态渲染拖到松手，否则拖动中内容反而退化窄条。
+        if (open && isDrawerOpen() !== open) requestDrawer(open);
+        // React 遮罩会随状态立即淡入（展开方向先行后必然出现），跟手期间
+        // 一律让位给自建遮罩，避免双层叠加发黑。
+        reactMask = doc.querySelector('.dshm-mask');
+        if (reactMask) reactMask.style.display = 'none';
+        if (!dragMask) {
+          dragMask = doc.createElement('div');
+          dragMask.className = 'dshm-drag-mask';
+          const host = (followSidebar && followSidebar.parentNode) || doc.body;
+          try {
+            host.appendChild(dragMask);
+          } catch (error) {
+            dragMask = null;
+          }
+        }
+        if (dragMask) dragMask.style.opacity = String(openAtStart ? 1 : 0);
+      };
+
+      /** 跟手中：按位移刷新抽屉 transform 与遮罩透明度，并采样速度。 */
+      const updateFollow = (x) => {
+        if (!following) return;
+        // 从定向点增量跟随：起手区里手指已走的 24~60px 不映射到位移，
+        // 否则抽屉从隐藏位瞬间跳到手指对应位置（视觉闪一下）。
+        const delta = x - followBaseX;
+        const raw = openAtStart ? 1 + delta / drawerWidth : delta / drawerWidth;
+        lastProgress = clamp01(raw);
+        moveCount += 1; // TEMP-DEBUG
+        if (moveCount <= 4 || moveCount % 10 === 0) console.info('[dshm-gesture] UPD n=' + moveCount + ' base=' + Math.round(followBaseX) + ' x=' + Math.round(x) + ' p=' + lastProgress.toFixed(2)); // TEMP-DEBUG
+        // 隐藏位是 translateX(-104%)，进度 p 内插：p=1 恰好归位。
+        setDrawerX((lastProgress - 1) * 104);
+        if (dragMask) dragMask.style.opacity = lastProgress.toFixed(3);
+        const now = win.performance.now();
+        samples.push({ t: now, x: x });
+        if (samples.length > 8) samples.shift();
+      };
+
+      /** 松手吸附：按位移比例 / 速度决定终态，交还 CSS 过渡做补间。 */
+      const endFollow = () => {
+        if (!following) return false;
+        following = false;
+        let velocity = 0;
+        if (samples.length >= 2) {
+          const first = samples[0];
+          const last = samples[samples.length - 1];
+          const dt = last.t - first.t;
+          if (dt > 0) velocity = (last.x - first.x) / dt;
+        }
+        const target = drawerSettle(openAtStart, lastProgress, velocity);
+        // 吸附时长按剩余距离与甩速自适应（固定 300ms 会让短距回弹生硬、
+        // 半程松手急冲）：decelerate 曲线下长距离前段快后段缓，手感连续。
+        // 减动效宿主（reduce-motion）压缩到 100ms。
+        const distPx = (Math.abs((target ? 0 : -104) - (lastProgress - 1) * 104) / 100) * drawerWidth;
+        const duration = reducedMotion
+          ? 100
+          : Math.round(Math.max(150, Math.min(420, distPx / Math.max(Math.abs(velocity), 0.3))));
+        if (debugOn) {
+          console.info(
+            '[dsh-mobile-layout] 抽屉吸附：progress=' + lastProgress.toFixed(2) +
+              ' velocity=' + velocity.toFixed(3) + ' → ' + (target ? 'open' : 'close') +
+              ' in ' + duration + 'ms',
+          );
+        }
+        console.info('[dshm-gesture] SETTLE target=' + target + ' dur=' + duration); // TEMP-DEBUG
+        if (followSidebar) {
+          // 吸附标记挂 <html>（时长走变量，侧栏内联会被官方同步清掉）。
+          doc.documentElement.removeAttribute('data-dshm-following');
+          doc.documentElement.setAttribute('data-dshm-settling', '');
+          doc.documentElement.style.setProperty('--dshm-settle-dur', duration + 'ms');
+          setDrawerX(target ? 0 : -104);
+        }
+        if (dragMask) {
+          dragMask.style.transition = 'opacity ' + duration + 'ms cubic-bezier(0.32, 0.72, 0, 1)';
+          dragMask.style.opacity = target ? '1' : '0';
+        }
+        applyDrawerDecision(target);
+        if (settleTimer) win.clearTimeout(settleTimer);
+        settleTimer = win.setTimeout(() => {
+          settleTimer = 0;
+          cleanupFollow(target);
+        }, duration + 80);
+        return true;
+      };
+
+      /**
+       * 吸附完成后的清理：还原内联样式与被让位的官方遮罩。
+       *
+       * 展开终态时官方 React 遮罩可能因槽位缺席而不渲染（overlay 注册
+       * 失败的宿主），这时轮询一小段时间，仍没有就挂 MutationObserver
+       * 兜底——抽屉日后被任何途径收起时淡出并摘除自建遮罩。
+       */
+      const cleanupFollow = (target) => {
+        const html = doc.documentElement;
+        console.info('[dshm-gesture] CLEANUP target=' + target + // TEMP-DEBUG
+          ' reactMaskNow=' + Boolean(doc.querySelector('.dshm-mask')) +
+          ' drag=' + Boolean(dragMask)); // TEMP-DEBUG
+        html.removeAttribute('data-dshm-settling');
+        // removeProperty 是 CSSStyleDeclaration 的方法：直接调在元素上会抛
+        // TypeError，cleanupFollow 中断——dragMask 永远不会摘除（滑动展开
+        // 后 opacity=1，非滑动路径收起抽屉时灰色遮罩永久残留，实测复现）。
+        html.style.removeProperty('--dshm-settle-dur');
+        // 终态变量保持（展开 0 / 收起 -104），后续由状态同步 observer 维护。
+        setDrawerX(target ? 0 : -104);
+        if (followSidebar) {
+          followSidebar = null;
+        }
+        if (reactMask) {
+          reactMask.style.removeProperty('display');
+          reactMask = null;
+        }
+        if (dragMask && !target) {
+          removeNode(dragMask);
+          dragMask = null;
+        }
+        if (maskSwapTimer) {
+          win.clearInterval(maskSwapTimer);
+          maskSwapTimer = 0;
+        }
+        if (fallbackObserver) {
+          fallbackObserver.disconnect();
+          fallbackObserver = null;
+        }
+        if (dragMask && target) {
+          let ticks = 0;
+          maskSwapTimer = win.setInterval(() => {
+            ticks += 1;
+            const reactMaskNow = Boolean(doc.querySelector('.dshm-mask'));
+            if (ticks <= 3 || ticks === 10) console.info('[dshm-gesture] SWAPTICK t=' + ticks + ' mask=' + reactMaskNow); // TEMP-DEBUG
+            if (reactMaskNow) {
+              win.clearInterval(maskSwapTimer);
+              maskSwapTimer = 0;
+              removeNode(dragMask);
+              dragMask = null;
+              console.info('[dshm-gesture] MASKSWAP ok ticks=' + ticks); // TEMP-DEBUG
+              return;
+            }
+            if (ticks < 10) return;
+            win.clearInterval(maskSwapTimer);
+            maskSwapTimer = 0;
+            console.info('[dshm-gesture] FALLBACK observer install'); // TEMP-DEBUG
+            // 官方遮罩始终不来：转状态观察，抽屉收起时淡出自建遮罩。
+            try {
+              const host = dragMask ? dragMask.parentNode : null;
+              const frame = host && host.closest ? host.closest('[data-dshm-frame]') : null;
+              if (!frame || typeof win.MutationObserver !== 'function') return;
+              fallbackObserver = new win.MutationObserver(() => {
+                if (!isDrawerOpen()) {
+                  if (fallbackObserver) {
+                    fallbackObserver.disconnect();
+                    fallbackObserver = null;
+                  }
+                  if (dragMask) {
+                    dragMask.style.transition = 'opacity 160ms var(--ds-ease-in-out, ease)';
+                    dragMask.style.opacity = '0';
+                  }
+                  win.setTimeout(() => {
+                    removeNode(dragMask);
+                    dragMask = null;
+                  }, 180);
+                }
+              });
+              fallbackObserver.observe(frame, { attributes: true, attributeFilter: ['data-sidebar-collapsed'] });
+            } catch (error) {
+              /* 观察不可用时保留遮罩，下次手势会重建 */
+            }
+          }, 60);
+        }
+      };
+
+      /** 中止跟手并按当前位置吸附（多点触控 / 系统打断时走这里）。 */
+      const cancelFollow = () => {
+        if (following) {
+          endFollow();
+          return true;
+        }
+        return false;
+      };
+
+      const gestureStart = (x, y, target, tag, id) => {
+        // 双通道去重：同一次手势 pointerdown 先于 touchstart 到达，后到的
+        // 通道的起点忽略（坐标一致，重置反而丢信息）。
+        if (active && source && source !== tag) return;
+        resetGesture();
+        if (getState().mode !== MODE_MOBILE) return;
+        try {
+          debugOn = String(win.localStorage.getItem('dshm-debug')) === '1';
+        } catch (error) {
+          debugOn = false;
+        }
+        debugOn = true; // TEMP-DEBUG: 真机取证用，验收后删除
+        if (debugOn) console.info('[dshm-gesture] START x=' + Math.round(x) + ' y=' + Math.round(y) + ' w=' + doc.documentElement.clientWidth + ' mode=' + getState().mode + ' open=' + isDrawerOpen()); // TEMP-DEBUG
+        if (target && target.closest && target.closest('[' + ATTR_SWIPE_IGNORE + ']')) {
+          debugLog('SWIPE_IGNORE');
+          return;
+        }
+        if (doc.querySelector('[data-rightbar-fullscreen]')) {
+          debugLog('RIGHTBAR_FULLSCREEN');
+          return;
+        }
+        if (blockedAtStart()) {
+          debugLog('BLOCKED_LAYER');
+          return;
+        }
+        active = true;
+        source = tag;
+        startX = x;
+        startY = y;
+        startTarget = target || null;
+        if (tag === 'pointer') pointerId = id;
+        else touchId = id;
+      };
+
+      const gestureMove = (x, y) => {
+        if (!active) return;
+        const dx = x - startX;
+        const dy = y - startY;
+        const horizontal = Math.abs(dx);
+        // 意图确认（24px）：竖滑明显就整轮作废，交给内容滚动。
+        if (!armed) {
+          if (horizontal < SWIPE_ARM_PX) return;
+          if (Math.abs(dy) > horizontal * 1.2) {
+            debugLog('TOO_VERTICAL');
+            resetGesture();
+            return;
+          }
+        }
+        const dir = dx > 0 ? 1 : -1;
+        console.info('[dshm-gesture] MOVE x=' + Math.round(x) + ' dx=' + Math.round(dx) + ' armed=' + armed + ' follow=' + following); // TEMP-DEBUG
+        // 定向（含方向翻转）时判定一次让路：容器已到边界就交还抽屉。
+        if (dir !== armed) {
+          armed = dir;
+          const scroller = horizScrollerOf(startTarget);
+          hConsume = scroller ? scrollerConsumes(scroller, dx) : false;
+          if (hConsume) debugLog('H_SCROLLER');
+        }
+        if (following) {
+          updateFollow(x);
+          return;
+        }
+        // 未跟手：24px 处一次性判定资格（起手区 / 方向 / 抽屉状态），合格
+        // 即进入跟手（减动效宿主退化为阈值触发）；不合格直接停跟踪——
+        // 资格条件（起手点、抽屉状态）在本轮手势内不会变化，无需反复判。
+        const decision = decideDrawerGesture(
+          {
+            dx: dx,
+            dy: dy,
+            startX: startX,
+            width: doc.documentElement.clientWidth,
+            drawerOpen: isDrawerOpen(),
+            blocked: false,
+            hScrollerConsumes: hConsume,
+          },
+          SWIPE_ARM_PX,
+        );
+        if (decision === 'open' || decision === 'close') {
+          beginFollow(decision === 'open', x);
+          if (following) updateFollow(x);
+          else applyDrawerDecision(decision === 'open');
+        } else if (horizontal >= SWIPE_MIN) {
+          // 过了阈值还不合格（起手出区 / 容器还要滚）：本轮放弃。
+          debugLog(hConsume ? 'H_SCROLLER' : 'OUT_OF_ZONE');
+          active = false;
+          armed = 0;
+        }
+      };
+
+      const touchById = (list, id) => {
+        if (!list || !list.length) return null;
+        if (id < 0) return list.length === 1 ? list.item(0) : null;
+        for (let i = 0; i < list.length; i += 1) {
+          const touch = list.item(i);
+          if (touch && touch.identifier === id) return touch;
+        }
+        return null;
+      };
+
+      const onTouchStart = (event) => {
+        if (!event.touches || event.touches.length !== 1) {
+          // 第二根手指落下：跟手中的按当前进度吸附收尾，否则直接弃。
+          if (!cancelFollow()) resetGesture();
+          return;
+        }
+        const touch = event.touches[0];
+        gestureStart(touch.clientX, touch.clientY, event.target, 'touch', touch.identifier);
+      };
+      const onTouchMove = (event) => {
+        if (!active || source !== 'touch') return;
+        if (!event.touches || event.touches.length !== 1) {
+          console.info('[dshm-gesture] MOVE-BAD len=' + (event.touches ? event.touches.length : 'null') + ' follow=' + following); // TEMP-DEBUG
+          if (!cancelFollow()) resetGesture();
+          return;
+        }
+        const touch = touchById(event.touches, touchId);
+        if (!touch) {
+          console.info('[dshm-gesture] MOVE-NOID id=' + touchId + ' ids=' + Array.from(event.touches).map(function (t) { return t.identifier; }).join(',')); // TEMP-DEBUG
+          return;
+        }
+        gestureMove(touch.clientX, touch.clientY);
+      };
+      const onTouchEnd = (event) => {
+        if (source !== 'touch') return;
+        const list = event.changedTouches;
+        if (list && touchId >= 0) {
+          for (let i = 0; i < list.length; i += 1) {
+            const touch = list.item(i);
+            if (touch && touch.identifier === touchId) {
+              endFollow();
+              resetGesture();
+              return;
+            }
+          }
+          return;
+        }
+        endFollow();
+        resetGesture();
+      };
+
+      const onPointerDown = (event) => {
+        // 触摸一律交给 touch 通道：Android WebView 的 pointer 序列会在页面
+        // 滚动容器接管时被 pointercancel 截杀（聊天页竖向可滚，右滑必中招），
+        // 而 touch 事件全程稳定派发不受影响。pointer 通道只服务鼠标 / 触控笔。
+        if (event.pointerType === 'touch') return;
+        gestureStart(event.clientX, event.clientY, event.target, 'pointer', event.pointerId);
+      };
+      const onPointerMove = (event) => {
+        if (!active || source !== 'pointer' || event.pointerId !== pointerId) return;
+        gestureMove(event.clientX, event.clientY);
+      };
+      const onPointerUp = (event) => {
+        if (source !== 'pointer' || event.pointerId !== pointerId) return;
+        // pointercancel（系统打断）同样按当前进度吸附，避免抽屉停在半路。
+        endFollow();
+        resetGesture();
+      };
+
+      const CAPTURE_PASSIVE = { capture: true, passive: true };
+      win.addEventListener('touchstart', onTouchStart, CAPTURE_PASSIVE);
+      win.addEventListener('touchmove', onTouchMove, CAPTURE_PASSIVE);
+      win.addEventListener('touchend', onTouchEnd, CAPTURE_PASSIVE);
+      win.addEventListener('touchcancel', onTouchEnd, CAPTURE_PASSIVE);
+      win.addEventListener('pointerdown', onPointerDown, CAPTURE_PASSIVE);
+      win.addEventListener('pointermove', onPointerMove, CAPTURE_PASSIVE);
+      win.addEventListener('pointerup', onPointerUp, CAPTURE_PASSIVE);
+      win.addEventListener('pointercancel', onPointerUp, CAPTURE_PASSIVE);
+      console.info('[dshm-gesture] BOUND ok, listeners=8'); // TEMP-DEBUG
+      // 官方状态 → 位移变量同步：遮罩点击 / Esc / 会话切换等任何途径开关
+      // 抽屉时保持视觉一致（位移已从 CSS 状态规则改为变量驱动）。
+      // subtree+attributeFilter 回调极轻；跟手 / 吸附期间 syncDrawerX 空转。
+      followObserver = new win.MutationObserver(() => {
+        if (frameElement()) {
+          syncDrawerX();
+          console.info('[dshm-gesture] ATTRSYNC open=' + isDrawerOpen() + // TEMP-DEBUG
+            ' reactMask=' + Boolean(doc.querySelector('.dshm-mask')) +
+            ' drag=' + (dragMask ? String(dragMask.style.opacity) : '-') +
+            ' x=' + doc.documentElement.style.getPropertyValue('--dshm-drawer-x')); // TEMP-DEBUG
+        }
+      });
+      followObserver.observe(doc.body || doc.documentElement, {
+        attributes: true,
+        attributeFilter: ['data-sidebar-collapsed'],
+        subtree: true,
+      });
+
+      return function release() {
+        released = true;
+        if (recheckTimer) {
+          win.clearTimeout(recheckTimer);
+          recheckTimer = 0;
+        }
+        if (settleTimer) {
+          win.clearTimeout(settleTimer);
+          settleTimer = 0;
+        }
+        if (maskSwapTimer) {
+          win.clearInterval(maskSwapTimer);
+          maskSwapTimer = 0;
+        }
+        if (fallbackObserver) {
+          fallbackObserver.disconnect();
+          fallbackObserver = null;
+        }
+        if (followSidebar) {
+          followSidebar = null;
+        }
+        if (followObserver) {
+          followObserver.disconnect();
+          followObserver = null;
+        }
+        if (reactMask) {
+          reactMask.style.removeProperty('display');
+          reactMask = null;
+        }
+        removeNode(dragMask);
+        dragMask = null;
+        const html = doc.documentElement;
+        html.removeAttribute('data-dshm-following');
+        html.removeAttribute('data-dshm-settling');
+        html.style.removeProperty('--dshm-settle-dur');
+        resetGesture();
+        win.removeEventListener('touchstart', onTouchStart, CAPTURE_PASSIVE);
+        win.removeEventListener('touchmove', onTouchMove, CAPTURE_PASSIVE);
+        win.removeEventListener('touchend', onTouchEnd, CAPTURE_PASSIVE);
+        win.removeEventListener('touchcancel', onTouchEnd, CAPTURE_PASSIVE);
+        win.removeEventListener('pointerdown', onPointerDown, CAPTURE_PASSIVE);
+        win.removeEventListener('pointermove', onPointerMove, CAPTURE_PASSIVE);
+        win.removeEventListener('pointerup', onPointerUp, CAPTURE_PASSIVE);
+        win.removeEventListener('pointercancel', onPointerUp, CAPTURE_PASSIVE);
+      };
     }
 
     // ---- 样式 ----
@@ -2905,7 +3525,10 @@ window.__ModuleLoader__.load({
       '  grid-row: 1 !important;',
       '  min-width: 0;',
       '}',
-      /* 官方侧栏列变成离屏抽屉；只有展开态（frame 无 data-sidebar-collapsed）才滑入。 */
+      /* 官方侧栏列变成离屏抽屉。位移由 <html> 上的 --dshm-drawer-x 变量驱动：
+         官方 React / narrow-sidebar 插件会重写侧栏元素的内联 style（实测清掉
+         内联 transform 导致抽屉瞬间全弹一帧），挂根元素上的变量它们碰不到。
+         变量由手势引擎维护（跟手 / 吸附 / 状态同步 observer），缺省收起。 */
       'html[data-dshm-mode="mobile"] [data-dshm-sidebar] {',
       '  position: absolute;',
       '  inset: 0 auto 0 0;',
@@ -2914,14 +3537,20 @@ window.__ModuleLoader__.load({
       '  max-width: 86vw;',
       '  height: 100%;',
       '  overflow: hidden;',
-      '  border-radius: 0 16px 16px 0;',
-      '  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.32);',
-      '  transform: translateX(-104%);',
-      '  transition: transform 220ms var(--ds-ease-in-out, ease);',
+      '  border-radius: 0 var(--dsw-radius-lg, 16px) var(--dsw-radius-lg, 16px) 0;',
+      '  box-shadow: var(--dsw-shadow-lv3, 0 12px 32px rgba(0, 0, 0, 0.32));',
+      '  transform: translateX(var(--dshm-drawer-x, -104%));',
+      '  transition: transform var(--ds-transition-duration-slow, 220ms) var(--ds-ease-in-out, ease);',
       '  will-change: transform;',
       '}',
-      'html[data-dshm-mode="mobile"] [data-dshm-frame]:not([data-sidebar-collapsed]) [data-dshm-sidebar] {',
-      '  transform: translateX(0);',
+      /* 跟手期关过渡（官方 data-dragging 同一语义），位移由手势逐帧驱动。
+         标记挂 <html>：侧栏元素上的属性 / 内联都会被官方同步清掉。 */
+      'html[data-dshm-mode="mobile"][data-dshm-following] [data-dshm-sidebar] {',
+      '  transition: none !important;',
+      '}',
+      /* 吸附补间：时长由 JS 按剩余距离 / 甩速写入 --dshm-settle-dur。 */
+      'html[data-dshm-mode="mobile"][data-dshm-settling] [data-dshm-sidebar] {',
+      '  transition: transform var(--dshm-settle-dur, 300ms) cubic-bezier(0.32, 0.72, 0, 1) !important;',
       '}',
       'html[data-dshm-mode="mobile"] [data-dshm-sidebar] > * {',
       '  width: 100% !important;',
@@ -2935,65 +3564,26 @@ window.__ModuleLoader__.load({
       'html[data-dshm-mode="mobile"] [data-android-narrow-sidebar-col] {',
       '  grid-column: auto !important;',
       '}',
-      /* 抽屉遮罩：位于内容之上、抽屉之下（overlayLayer z=20 < sidebar z=30）。 */
+      /* 抽屉遮罩：位于内容之上、抽屉之下（overlayLayer z=20 < sidebar z=30）。
+         颜色走官方遮罩 alias token。 */
       'html[data-dshm-mode="mobile"] .dshm-mask {',
       '  position: absolute;',
       '  inset: 0;',
       '  z-index: 25;',
-      '  background: rgba(0, 0, 0, 0.38);',
+      '  background: var(--dsw-alias-bg-mask-1, rgba(0, 0, 0, 0.38));',
       '  border: 0;',
       '  padding: 0;',
-      '  transition: opacity 160ms ease;',
+      '  transition: opacity 160ms var(--ds-ease-in-out, ease);',
       '}',
-      'html[data-dshm-mode="mobile"] .dshm-menu-btn {',
-      '  display: inline-flex;',
-      '  align-items: center;',
-      '  justify-content: center;',
-      '  width: 40px;',
-      '  height: 40px;',
-      '  margin-right: 4px;',
-      '  padding: 0;',
-      '  border: 0;',
-      '  border-radius: 10px;',
-      '  background: transparent;',
-      '  color: inherit;',
-      '  flex: none;',
-      '}',
-      'html[data-dshm-mode="mobile"] .dshm-menu-btn:active {',
-      '  background: rgba(127, 127, 127, 0.16);',
-      '}',
-      /* 全局面板没有会话头时，遮罩层提供浮动侧栏入口：水平贴页面标题左缘
-         （JS 写入 --dshm-float-menu-left），垂直对齐标题行中位
-         （--dshm-float-menu-top）。无边框底色，视觉上嵌在标题行内；
-         标题太靠左放不下时 JS 退回 8px 兜底并右移标题（--dshm-page-head-shift）。 */
-      'html[data-dshm-mode="mobile"] .dshm-float-menu {',
-      '  position: fixed;',
-      '  top: var(--dshm-float-menu-top, calc(8px + var(--dshm-safe-top)));',
-      '  left: var(--dshm-float-menu-left, calc(8px + var(--dshm-safe-left)));',
-      '  z-index: 26;',
-      '  width: 36px;',
-      '  height: 36px;',
-      '  display: inline-flex;',
-      '  align-items: center;',
-      '  justify-content: center;',
-      '  padding: 0;',
-      '  border: 0;',
-      '  border-radius: 10px;',
-      '  background: transparent;',
-      '  color: inherit;',
-      '  transition: opacity 120ms ease;',
-      '}',
-      'html[data-dshm-mode="mobile"] .dshm-float-menu:active {',
-      '  background: rgba(127, 127, 127, 0.16);',
-      '}',
-      /* 页头滚出可视区时隐藏（滚动跟踪见 syncPageHead），滚回来淡入显示。 */
-      'html[data-dshm-mode="mobile"][data-dshm-float-menu-hidden] .dshm-float-menu {',
+      /* 跟手期自建遮罩：透明度由手势逐帧驱动，自身不带过渡（吸附淡入 /
+         淡出时由 JS 临时补 inline transition），不接收指针事件。 */
+      'html[data-dshm-mode="mobile"] .dshm-drag-mask {',
+      '  position: absolute;',
+      '  inset: 0;',
+      '  z-index: 25;',
+      '  background: var(--dsw-alias-bg-mask-1, rgba(0, 0, 0, 0.38));',
       '  opacity: 0;',
       '  pointer-events: none;',
-      '}',
-      'html[data-dshm-mode="mobile"] [data-dshm-page-shift] {',
-      '  position: relative !important;',
-      '  left: var(--dshm-page-head-shift, 0px) !important;',
       '}',
       /* 底部常驻条由官方 shell.bottom 行承载（grid 第二行 auto），
          高度含安全区，避免手势条遮挡最后一个按键。与输入区同表面，
@@ -3825,7 +4415,6 @@ window.__ModuleLoader__.load({
 
       /* ---- 设置弹窗：手机端全屏 ---------------------------------------- */
       'html[data-dshm-mode="mobile"][data-dshm-settings-open] [data-dshm-bottom],',
-      'html[data-dshm-mode="mobile"][data-dshm-settings-open] .dshm-float-menu,',
       'html[data-dshm-mode="mobile"][data-dshm-settings-open] .dshm-sheet,',
       'html[data-dshm-mode="mobile"][data-dshm-settings-open] .dshm-sheet-mask {',
       '  display: none !important;',
@@ -4128,61 +4717,6 @@ window.__ModuleLoader__.load({
 
     // ---- React 组件 ----
     const h = react.createElement;
-
-    /** ☰ 图标。 */
-    function MenuIcon() {
-      return h(
-        'svg',
-        { width: 22, height: 22, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round', 'aria-hidden': 'true' },
-        h('path', { d: 'M4 6.5h16' }),
-        h('path', { d: 'M4 12h16' }),
-        h('path', { d: 'M4 17.5h16' }),
-      );
-    }
-
-    /**
-     * Sidebar 图标（panel-left：圆角矩形 + 左侧竖分隔线），全局面板的浮动
-     * 侧栏入口专用；会话头里的抽屉入口仍是 ☰（官方 header leading 语义）。
-     */
-    function SidebarIcon() {
-      return h(
-        'svg',
-        {
-          width: 22,
-          height: 22,
-          viewBox: '0 0 24 24',
-          fill: 'none',
-          stroke: 'currentColor',
-          strokeWidth: 1.8,
-          strokeLinecap: 'round',
-          strokeLinejoin: 'round',
-          'aria-hidden': 'true',
-        },
-        h('rect', { x: 3, y: 4.5, width: 18, height: 15, rx: 2.5 }),
-        h('path', { d: 'M9.5 4.5v15' }),
-      );
-    }
-
-    /** 会话头左侧的抽屉入口。占位由官方 header leading 槽位提供。 */
-    function HamburgerButton() {
-      const layoutState = useLayoutState();
-      react.useEffect(() => {
-        setState({ headerLeading: true });
-        return () => setState({ headerLeading: false });
-      }, []);
-      if (layoutState.mode !== MODE_MOBILE) return null;
-      return h(
-        'button',
-        {
-          type: 'button',
-          className: 'dshm-menu-btn',
-          'aria-label': t('menu'),
-          'aria-expanded': layoutState.drawerOpen ? 'true' : 'false',
-          onClick: () => requestDrawer(!isDrawerOpen()),
-        },
-        h(MenuIcon),
-      );
-    }
 
     /** 20px 线性图标（底部条统一风格，不依赖官方图标组件）。 */
     function strokeIcon(...paths) {
@@ -4574,73 +5108,24 @@ window.__ModuleLoader__.load({
     }
 
     /**
-     * 遮罩 / 手势层 / 全局面板兜底入口。
+     * 遮罩 / 全局面板兜底入口。
      *
      * 注册在 shell.overlay（list，root）；该层 pointer-events: none，子元素
      * 自动恢复指针事件，所以关闭态不阻塞任何交互。
+     *
+     * 左缘手势已从这里搬走（0.1.15）：槽位组件的监听够不着其它插件提供的
+     * 面板页（页面自己消费触摸事件或整页横滚都会截断冒泡），现在由
+     * bindDrawerGesture 在 window 捕获阶段常驻监听，与本组件挂载状态解耦。
      */
     function OverlayLayer() {
       const layoutState = useLayoutState();
       const mobile = layoutState.mode === MODE_MOBILE;
       const open = mobile && layoutState.drawerOpen;
+      console.info('[dshm-overlay] RENDER open=' + open + ' drawerOpen=' + layoutState.drawerOpen); // TEMP-DEBUG
 
       react.useEffect(() => {
         if (!mobile) return undefined;
         const doc = document;
-        let tracking = false;
-        let startX = 0;
-        let startY = 0;
-        let startedInZone = false;
-
-        /** 起手点是否在横向滚动容器（代码块 / 轮播）内：横滑属于内容本身。 */
-        const insideHorizScroller = (node) => {
-          let cur = node instanceof doc.defaultView.Element ? node : null;
-          for (let i = 0; cur && i < 6; i += 1) {
-            if (cur.scrollWidth > cur.clientWidth + 4) {
-              const overflowX = doc.defaultView.getComputedStyle(cur).overflowX;
-              if (overflowX === 'auto' || overflowX === 'scroll') return true;
-            }
-            cur = cur.parentElement;
-          }
-          return false;
-        };
-
-        const onTouchStart = (event) => {
-          if (event.touches.length !== 1) return;
-          const touch = event.touches[0];
-          if (doc.querySelector('[data-rightbar-fullscreen]')) return;
-          startX = touch.clientX;
-          startY = touch.clientY;
-          tracking = true;
-          // 全面屏手势会吃掉左缘滑动（系统返回），打开区扩到左 40%（QQ 式）：
-          // 中间偏左起手右滑也能开抽屉；收起方向（抽屉开着左滑）不受起手区限制。
-          startedInZone = !isDrawerOpen() && startX <= drawerStartLimit(doc.documentElement.clientWidth);
-          if (!startedInZone) return;
-          // 浮层（底部表 / ⊕ 面板 / 设置页）打开时不再叠开抽屉。
-          if (
-            getState().sheet !== null ||
-            getState().popoverOpen ||
-            doc.querySelector('[' + ATTR_POPOVER + ']') ||
-            settingsPanelOpen()
-          ) {
-            startedInZone = false;
-            return;
-          }
-          if (insideHorizScroller(event.target)) startedInZone = false;
-        };
-        const onTouchMove = (event) => {
-          if (!tracking || event.touches.length !== 1) return;
-          const touch = event.touches[0];
-          const dx = touch.clientX - startX;
-          const dy = touch.clientY - startY;
-          if (Math.abs(dx) < 48 || Math.abs(dx) < Math.abs(dy) * 1.2) return;
-          tracking = false;
-          if (dx > 0 && startedInZone) requestDrawer(true);
-          else if (dx < 0 && isDrawerOpen()) requestDrawer(false);
-        };
-        const onTouchEnd = () => {
-          tracking = false;
-        };
         // ⊕ 面板开着点输入框：捕获阶段截住，先主动收面板，键盘等面板收完再拉。
         const onAddPanelPointerDown = (event) => {
           closeAddMenuForComposerTap(event);
@@ -4672,17 +5157,9 @@ window.__ModuleLoader__.load({
           }
         };
 
-        doc.addEventListener('touchstart', onTouchStart, { passive: true });
-        doc.addEventListener('touchmove', onTouchMove, { passive: true });
-        doc.addEventListener('touchend', onTouchEnd, { passive: true });
-        doc.addEventListener('touchcancel', onTouchEnd, { passive: true });
         doc.addEventListener('pointerdown', onAddPanelPointerDown, { capture: true, passive: true });
         doc.addEventListener('keydown', onKeyDown);
         return () => {
-          doc.removeEventListener('touchstart', onTouchStart);
-          doc.removeEventListener('touchmove', onTouchMove);
-          doc.removeEventListener('touchend', onTouchEnd);
-          doc.removeEventListener('touchcancel', onTouchEnd);
           doc.removeEventListener('pointerdown', onAddPanelPointerDown, { capture: true });
           doc.removeEventListener('keydown', onKeyDown);
         };
@@ -4694,8 +5171,7 @@ window.__ModuleLoader__.load({
        * 抽屉本体是官方侧栏，它的 role / aria-modal 由 syncDrawerA11y 在展开
        * 期间临时补上（收起即还原），这里只负责焦点：否则键盘 / 读屏用户打开
        * 抽屉后仍停在遮罩或底部条上，Tab 顺序走的是背后的内容。关闭时把焦点
-       * 还给打开前的元素，若那个元素已经在抽屉内（或已卸载），退回到汉堡 /
-       * 浮层菜单按钮。
+       * 还给打开前的元素。
        */
       react.useEffect(() => {
         if (!mobile || !open) return undefined;
@@ -4719,11 +5195,7 @@ window.__ModuleLoader__.load({
           }
         }
         return () => {
-          const now = doc.querySelector('[' + ATTR_SIDEBAR + ']');
-          let back = prev;
-          if (!back || back === doc.body || !back.isConnected || (now && now.contains(back))) {
-            back = doc.querySelector('.dshm-menu-btn') || doc.querySelector('.dshm-float-menu');
-          }
+          const back = prev;
           if (back && back.isConnected && typeof back.focus === 'function') {
             try {
               back.focus({ preventScroll: true });
@@ -4749,19 +5221,6 @@ window.__ModuleLoader__.load({
               tabIndex: -1,
               onClick: () => requestDrawer(false),
             })
-          : null,
-        !layoutState.headerLeading
-          ? h(
-              'button',
-              {
-                type: 'button',
-                className: 'dshm-float-menu',
-                'aria-label': t('drawer'),
-                'aria-expanded': open ? 'true' : 'false',
-                onClick: () => requestDrawer(!isDrawerOpen()),
-              },
-              h(SidebarIcon),
-            )
           : null,
         sheet
           ? h('button', {
@@ -5009,7 +5468,6 @@ window.__ModuleLoader__.load({
           setState({ popoverOpen: false });
           clearStatsBar();
           clearHero();
-          clearPageHead();
           clearSettingsPanel();
           document.documentElement.removeAttribute('data-dshm-header-menu-open');
           document.documentElement.style.removeProperty('--dshm-header-menu-top');
@@ -5269,35 +5727,31 @@ window.__ModuleLoader__.load({
       doc.addEventListener('touchstart', onSettingsTouchStart, { passive: true });
       doc.addEventListener('touchend', onSettingsTouchEnd, { passive: true });
       doc.addEventListener('touchcancel', onSettingsTouchCancel, { passive: true });
-      // 全局面板页头滚动跟踪：侧栏键按标题位置固定定位，页面滚动时标题滚走
-      // 而键钉在原地会盖住滚上来的内容。滚动时重算一次页头位置，标题滚出
-      // 可视区由 syncPageHead 打 data-dshm-float-menu-hidden 隐藏，滚回再显示。
-      let pageHeadRaf = 0;
-      const onDocScroll = () => {
-        if (state.mode !== MODE_MOBILE || !state.panelActive) return;
-        if (pageHeadRaf) return;
-        pageHeadRaf = win.requestAnimationFrame(() => {
-          pageHeadRaf = 0;
-          if (!disposed) syncPageHead();
-        });
-      };
-      doc.addEventListener('scroll', onDocScroll, { capture: true, passive: true });
+      // 模型 / 权限选择器的搜索框焦点守卫：自动落焦立即 blur，防软键盘
+      // 一开就盖住选项列表；用户点搜索框的正常路径放行。
+      try {
+        installPickerFocusGuard(doc);
+      } catch (error) {
+        logWarn('选择器搜索框焦点守卫安装失败：', error);
+      }
+      // 抽屉手势挂在 window 捕获阶段而不是 shell.overlay 槽位里：其它插件
+      // 提供的面板页可能自己消费触摸事件（stopPropagation / 整页横滚），
+      // 槽位组件的冒泡监听够不着；捕获阶段先于一切目标处理器，任何页面
+      // 都监听得到。见 bindDrawerGesture 的头注释与 docs/plan-drawer-gesture.md。
+      let releaseDrawerGesture = null;
+      try {
+        releaseDrawerGesture = bindDrawerGesture(win, doc);
+      } catch (error) {
+        logWarn('抽屉手势绑定失败（左缘滑动开抽屉不可用）：', error);
+      }
       if (win.visualViewport) win.visualViewport.addEventListener('resize', onResize);
 
-      // 官方槽位注册：☰ 与会话头同生共死；遮罩层常驻但在默认布局下不渲染。
+      // 官方槽位注册：遮罩层常驻但在默认布局下不渲染。
       // 客户端 cordis 的服务必须先 inject 才能取用（直接 ctx.slots 会抛错）。
       try {
         ctx.inject(['slots', 'layout'], (scoped) => {
           runtime.layout = scoped.layout || null;
           const slots = scoped.slots;
-          try {
-            slots.inject('conversation.header.leading', () => slots.register(
-              { name: 'conversation.header.leading', id: 'dshm-menu', order: 5 },
-              HamburgerButton,
-            ));
-          } catch (error) {
-            logWarn('会话头 leading 槽位注册失败（抽屉入口不可用）：', error);
-          }
           try {
             slots.inject('shell.overlay', () => slots.register(
               { name: 'shell.overlay', id: 'dshm-overlay', order: 5 },
@@ -5402,6 +5856,7 @@ window.__ModuleLoader__.load({
         doc.removeEventListener('touchstart', onSettingsTouchStart);
         doc.removeEventListener('touchend', onSettingsTouchEnd);
         doc.removeEventListener('touchcancel', onSettingsTouchCancel);
+        if (releaseDrawerGesture) releaseDrawerGesture();
         doc.removeEventListener('scroll', onDocScroll, true);
         if (pageHeadRaf) win.cancelAnimationFrame(pageHeadRaf);
         if (win.visualViewport) win.visualViewport.removeEventListener('resize', onResize);
@@ -5452,9 +5907,6 @@ window.__ModuleLoader__.load({
         doc.documentElement.style.removeProperty('--dshm-header-menu-right');
         doc.documentElement.removeAttribute('data-dshm-header-menu-open');
         doc.documentElement.style.removeProperty('--dshm-hero-shift');
-        doc.documentElement.style.removeProperty('--dshm-float-menu-top');
-        doc.documentElement.style.removeProperty('--dshm-float-menu-left');
-        doc.documentElement.style.removeProperty('--dshm-page-head-shift');
         clearStatsBar();
         if (styleEl && styleEl.parentNode) styleEl.parentNode.removeChild(styleEl);
         subscribers.clear();
@@ -5462,7 +5914,6 @@ window.__ModuleLoader__.load({
           mode: MODE_DEFAULT,
           anchored: false,
           drawerOpen: false,
-          headerLeading: false,
           rightbarFullscreen: false,
           panelActive: false,
           sheet: null,
@@ -5530,8 +5981,14 @@ window.__ModuleLoader__.load({
       swipeDirection,
       nextTabIndex,
       drawerStartLimit,
+      SWIPE_ARM_PX,
+      isHorizScrollerMetrics,
+      scrollerConsumes,
+      decideDrawerGesture,
+      drawerSettle,
+      SETTLE_RATIO,
+      SETTLE_VELOCITY,
       resolveImeHeight,
-      floatMenuLeft,
       SWIPE_MIN,
       SHEET_DRAG_CLOSE_PX,
       shouldCloseSheetByDrag,
