@@ -32,7 +32,7 @@ window.__ModuleLoader__.load({
 
     const react = require('react');
 
-    const VERSION = '0.2.8';
+    const VERSION = '0.2.9';
     const MODE_MOBILE = 'mobile';
     const MODE_DEFAULT = 'default';
 
@@ -564,6 +564,28 @@ window.__ModuleLoader__.load({
       const ratio = Number.isFinite(p) ? p : wasOpen ? 1 : 0;
       if (Number.isFinite(v) && Math.abs(v) >= SETTLE_VELOCITY) return v > 0;
       return ratio >= SETTLE_RATIO;
+    }
+
+    /**
+     * 设置页左滑退出的松手吸附判定（纯函数）。
+     *
+     * 设置页全屏铺开，左滑退出语义与抽屉「展开后左滑收」一致：位移比例
+     * （dx/width，左滑为负）越过 {@link SETTLE_RATIO} 或左甩速度达到
+     * {@link SETTLE_VELOCITY} 就退出，否则弹回原位。
+     *
+     * @param {number} ratio 位移比例（左滑为负）
+     * @param {number} velocity 水平速度 px/ms（左滑为负）
+     * @returns {boolean} true = 关闭设置页
+     */
+    function settingsSettle(ratio, velocity) {
+      const r = Number(ratio);
+      const v = Number(velocity);
+      const rv = Number.isFinite(r) ? r : 0;
+      if (Number.isFinite(v) && Math.abs(v) >= SETTLE_VELOCITY) {
+        // 甩动方向与位移同向才算退出意图，反向甩动视为弹回。
+        return rv !== 0 && (v > 0) === (rv > 0);
+      }
+      return Math.abs(rv) >= SETTLE_RATIO;
     }
 
     /**
@@ -1550,15 +1572,44 @@ window.__ModuleLoader__.load({
       return true;
     }
 
+    /** 面板退场动画互斥位：退场进行中不重复触发。 */
+    const popoverFx = { closing: false };
+
     /** 收起已展开的官方 composer 弹层（⊕ 再次点击时用）。 */
     function closeOfficialAddMenu() {
-      if (document.querySelector('[' + ATTR_POPOVER + ']')) {
+      if (popoverFx.closing) return;
+      const panel = document.querySelector('[' + ATTR_POPOVER + ']');
+      const finish = () => {
+        popoverFx.closing = false;
+        setState({ popoverOpen: false });
+      };
+      let reduce = false;
+      try {
+        reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      } catch (error) {
+        reduce = false;
+      }
+      const PointerCtor = typeof window.PointerEvent === 'function' ? window.PointerEvent : window.MouseEvent;
+      const dismiss = () => {
         // 给 body 派发 pointerdown 触发官方点击外部关闭，不产生 click，
         // 避免点穿到下面的元素。
-        const PointerCtor = typeof window.PointerEvent === 'function' ? window.PointerEvent : window.MouseEvent;
         document.body.dispatchEvent(new PointerCtor('pointerdown', { bubbles: true }));
+        finish();
+      };
+      if (!panel || reduce) {
+        dismiss();
+        return;
       }
-      setState({ popoverOpen: false });
+      // 退场动画：面板下滑离场后再走官方关闭；这期间 frame 的预留高度还在，
+      // 输入行保持在面板顶上方，面板走完输入行才回落（syncPanelSpace 收尾）。
+      popoverFx.closing = true;
+      panel.style.setProperty('transition', 'translate 160ms cubic-bezier(0.4, 0, 1, 1)', 'important');
+      panel.style.setProperty('translate', '0 105%', 'important');
+      window.setTimeout(() => {
+        panel.style.removeProperty('transition');
+        panel.style.removeProperty('translate');
+        dismiss();
+      }, 170);
     }
 
     /**
@@ -1738,9 +1789,16 @@ window.__ModuleLoader__.load({
       pickerFocusGuard.installed = true;
       doc.addEventListener('pointerdown', (event) => {
         const target = event.target;
-        const hit = target && target.closest
-          && target.closest('[data-dshm-picker] input, input[placeholder]');
-        if (hit && /^(搜索|search)/i.test(String(hit.getAttribute('placeholder') || '').trim())) {
+        if (!target || !target.closest) return;
+        // 已打标记的选择器内输入框：一律视为用户意图（placeholder 属性可能
+        // 缺失，不能按语义二次过滤——漏记会把用户自己的聚焦也 blur 掉）。
+        if (target.closest('[data-dshm-picker] input')) {
+          pickerFocusGuard.lastTouch = Date.now();
+          return;
+        }
+        // 未打标记的空态选择器：按搜索框语义识别。
+        const searchInput = target.closest('input[placeholder]');
+        if (searchInput && /^(搜索|search)/i.test(String(searchInput.getAttribute('placeholder') || '').trim())) {
           pickerFocusGuard.lastTouch = Date.now();
         }
       }, true);
@@ -2186,6 +2244,12 @@ window.__ModuleLoader__.load({
       }
       const height = Math.round(root.getBoundingClientRect().height);
       if (height <= 0) return;
+      // 受控退场若被官方复用节点打断，残留的内联 translate 会在下次打开时
+      // 把面板压在屏外；非退场期间一律清掉（入场动画由 CSS keyframes 驱动）。
+      if (!popoverFx.closing && root.style.getPropertyValue('translate')) {
+        root.style.removeProperty('translate');
+        root.style.removeProperty('transition');
+      }
       html.setAttribute('data-dshm-panel', '');
       // 圆点指示器浮在面板底部内边距里，不占额外高度（面板高度只由宫格决定）。
       const next = height + 'px';
@@ -2196,6 +2260,8 @@ window.__ModuleLoader__.load({
 
     // ---- 设置弹窗：手机端全屏化 ----
     const settingsState = { active: '' };
+    /** 设置页开合动画互斥位：退场进行中不再重复触发。 */
+    const settingsFx = { closing: false };
     /** 滑动换页后淡入标记的回收定时器。 */
     let settingsSwapTimer = 0;
 
@@ -2296,12 +2362,13 @@ window.__ModuleLoader__.load({
       '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M15 5l-7 7 7 7"/></svg>';
 
     /**
-     * 返回键：点官方关闭按钮，让官方状态机自己收尾；找不到按钮时只撤插件标记。
+     * 设置页立即关闭（无退场动画）：点官方关闭按钮，让官方状态机自己收尾；
+     * 找不到按钮时只撤插件标记。
      *
      * 系统返回键（Android 返回 / 手势）与 Esc 走的也是这条路，三条入口共用
      * 一个出口，避免「系统返回关得掉、界面按钮关不掉」这种分叉。
      */
-    function closeSettingsByBack() {
+    function closeSettingsImmediate() {
       const close = document.querySelector('[' + ATTR_SETTINGS_CLOSE + ']');
       if (close && typeof close.click === 'function') {
         close.click();
@@ -2309,6 +2376,37 @@ window.__ModuleLoader__.load({
       }
       clearSettingsPanel();
       syncOverlayHistory();
+    }
+
+    /**
+     * 设置页退出（带退场动画）：面板先滑出再走官方关闭。
+     *
+     * 官方弹窗是瞬时卸载，手机端全屏化后开与关都是「一瞬间」，与 composer
+     * 的过渡不同步（用户实测反馈）。这里统一给返回键 / Esc / 返回箭头 /
+     * 左滑手势一条动画出口；减动效宿主直接走立即关闭。
+     */
+    function closeSettingsByBack() {
+      if (settingsFx.closing) return;
+      const panel = document.querySelector('[' + ATTR_SETTINGS_PANEL + ']');
+      let reduce = false;
+      try {
+        reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      } catch (error) {
+        reduce = false;
+      }
+      if (!panel || reduce) {
+        closeSettingsImmediate();
+        return;
+      }
+      settingsFx.closing = true;
+      panel.style.setProperty('transition', 'translate 220ms cubic-bezier(0.4, 0, 1, 1)', 'important');
+      panel.style.setProperty('translate', '0 105%', 'important');
+      window.setTimeout(() => {
+        settingsFx.closing = false;
+        panel.style.removeProperty('transition');
+        panel.style.removeProperty('translate');
+        closeSettingsImmediate();
+      }, 250);
     }
 
     /**
@@ -2580,6 +2678,28 @@ window.__ModuleLoader__.load({
       settingsSwipe.active = false;
     }
 
+    /**
+     * 设置页翻页容器在该方向是否还能换页（内容翻页由 settingsSwipe 在
+     * touchend 离散完成，这里按激活页签下标判边界）。
+     *
+     * 左滑（dir=-1）是下一页、右滑（dir=+1）是上一页（swipeDirection 的
+     * 符号约定：dx<0 → 1）。只保留左边界退出：最左页签上右滑翻页吞不掉
+     * 时交给面板跟手退出；左滑一律让路换页（最右再左滑不退出）。
+     *
+     * @param {number} dir 手势方向：-1 左滑 / +1 右滑
+     * @returns {boolean} true = 该方向还能换页，手势应让路
+     */
+    function settingsPagerCanConsume(dir) {
+      const found = settingsTabItems();
+      if (!found) return false;
+      const items = found.items;
+      if (items.length < 2) return false;
+      let index = settingsTabActiveIndex(items);
+      if (index < 0) index = nearestTabIndex(found.tabs, items);
+      if (dir < 0) return true;
+      return index > 0;
+    }
+
     /** 让当前页签滚到页签条中央（只在激活项变化时动，不抢用户横滑）。 */
     function centerSettingsTab() {
       const found = settingsTabItems();
@@ -2608,6 +2728,12 @@ window.__ModuleLoader__.load({
     function clearSettingsPanel() {
       const html = document.documentElement;
       settingsState.active = '';
+      // 开合动画的内联 translate / transition 可能残留在面板上（官方自行
+      // 关闭、动画中途弹窗被卸载等），这里一并摘掉。
+      document.querySelectorAll('[' + ATTR_SETTINGS_PANEL + ']').forEach((panel) => {
+        panel.style.removeProperty('transition');
+        panel.style.removeProperty('translate');
+      });
       if (html.hasAttribute('data-dshm-settings-open')) {
         html.removeAttribute('data-dshm-settings-open');
         // 品牌行与返回键由插件创建，官方不会回收，这里连节点一起摘掉
@@ -2621,6 +2747,37 @@ window.__ModuleLoader__.load({
         setState({ settingsOpen: false });
         syncOverlayHistory();
       }
+    }
+
+    /**
+     * 设置页入场动画：自底滑入。
+     *
+     * 官方弹窗挂载即呈现，全屏化后 opening 瞬变、与 composer 的隐藏过渡
+     * 脱节。面板初始内联 translate 压到屏下，下一帧带过渡归位；退场由
+     * closeSettingsByBack 负责。减动效宿主跳过。
+     */
+    function animateSettingsIn(panel) {
+      let reduce = false;
+      try {
+        reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      } catch (error) {
+        reduce = false;
+      }
+      if (reduce || !panel || !panel.isConnected) return;
+      panel.style.setProperty('translate', '0 105%', 'important');
+      window.requestAnimationFrame(() => {
+        if (!panel.isConnected || settingsFx.closing) {
+          panel.style.removeProperty('transition');
+          panel.style.removeProperty('translate');
+          return;
+        }
+        panel.style.setProperty('transition', 'translate 260ms cubic-bezier(0.32, 0.72, 0, 1)', 'important');
+        panel.style.setProperty('translate', '0 0', 'important');
+        window.setTimeout(() => {
+          panel.style.removeProperty('transition');
+          panel.style.removeProperty('translate');
+        }, 290);
+      });
     }
 
     /** 每次 DOM 变更后同步：识别设置弹窗 → 打标 → 打开全屏态。 */
@@ -2643,6 +2800,7 @@ window.__ModuleLoader__.load({
         if (isDrawerOpen()) requestDrawer(false);
         setState({ settingsOpen: true });
         syncOverlayHistory();
+        animateSettingsIn(found.dialog);
       }
       centerSettingsTab();
     }
@@ -2954,6 +3112,16 @@ window.__ModuleLoader__.load({
       let debugOn = false;
       let recheckTimer = 0;
       let released = false;
+      /** 设置页左滑退出：起手时设置页在屏上（本轮手势只服务退出语义）。 */
+      let settingsExit = false;
+      /** 起手点是否在设置页内容滚动区（与翻页同一准入，canStartSettingsSwipe）。 */
+      let settingsAreaOk = false;
+      /** 设置页跟手阶段：面板位移由手势引擎直接驱动（内联 translate）。 */
+      let settingsFollowing = false;
+      /** 跟手中的设置面板元素；松手吸附后置空。 */
+      let settingsPanel = null;
+      /** 当前跟手位移（≤0，左滑为负）。 */
+      let settingsDx = 0;
 
       const clamp01 = (value) => {
         const v = Number(value);
@@ -2985,12 +3153,11 @@ window.__ModuleLoader__.load({
         console.info('[dsh-mobile-layout] 抽屉手势忽略：' + reason);
       };
 
-      /** 浮层 / 设置页开着时不起手势（与旧实现同一组条件）。 */
-      const blockedAtStart = () =>
+      /** 浮层开着时不起手势（底部表 / 官方 ⊕ 浮层 / 头部菜单）。 */
+      const overlayBlocked = () =>
         getState().sheet !== null ||
         getState().popoverOpen ||
-        Boolean(doc.querySelector('[' + ATTR_POPOVER + ']')) ||
-        settingsPanelOpen();
+        Boolean(doc.querySelector('[' + ATTR_POPOVER + ']'));
 
       const overflowXOf = (node) => {
         try {
@@ -3026,6 +3193,13 @@ window.__ModuleLoader__.load({
         startTarget = null;
         armed = 0;
         hConsume = false;
+        settingsExit = false;
+        settingsAreaOk = false;
+        // settingsFollowing 的收尾走 endFollow（吸附计时器自持面板引用），
+        // 这里只复位跟踪标记。
+        settingsFollowing = false;
+        settingsPanel = null;
+        settingsDx = 0;
       };
 
       /** 触发后的复核：DOM 与手势目标不一致时只补一次 toggle。 */
@@ -3125,6 +3299,10 @@ window.__ModuleLoader__.load({
 
       /** 松手吸附：按位移比例 / 速度决定终态，交还 CSS 过渡做补间。 */
       const endFollow = () => {
+        if (settingsFollowing) {
+          endSettingsFollow();
+          return true;
+        }
         if (!following) return false;
         following = false;
         let velocity = 0;
@@ -3261,7 +3439,84 @@ window.__ModuleLoader__.load({
           endFollow();
           return true;
         }
+        if (settingsFollowing) {
+          endFollow();
+          return true;
+        }
         return false;
+      };
+
+      /**
+       * 设置页跟手：进入跟手阶段，面板位移改由手势引擎驱动（内联 translate）。
+       *
+       * 设置页全屏铺开时官方没有任何退场动画，边界外滑动复用抽屉的跟手
+       * 手感：面板 translate 直接跟手指（方向跟随滑动），松手按位移比例 /
+       * 速度吸附（settingsSettle）。
+       */
+      const beginSettingsFollow = () => {
+        settingsPanel = doc.querySelector('[' + ATTR_SETTINGS_PANEL + ']');
+        if (!settingsPanel) {
+          active = false;
+          return false;
+        }
+        settingsFollowing = true;
+        settingsDx = 0;
+        samples = [];
+        try {
+          reducedMotion = Boolean(
+            win.matchMedia && win.matchMedia('(prefers-reduced-motion: reduce)').matches,
+          );
+        } catch (error) {
+          reducedMotion = false;
+        }
+        // 开场动画的内联 transition 若还在（入场 260ms 内就开滑），关掉再跟手。
+        settingsPanel.style.setProperty('transition', 'none', 'important');
+        return true;
+      };
+
+      /** 设置页跟手中：面板 translate 跟手指（方向随滑动），采样速度。 */
+      const updateSettingsFollow = (x) => {
+        if (!settingsFollowing || !settingsPanel) return;
+        settingsDx = x - followBaseX;
+        settingsPanel.style.setProperty('translate', settingsDx.toFixed(1) + 'px 0', 'important');
+        const now = win.performance.now();
+        samples.push({ t: now, x: x });
+        if (samples.length > 8) samples.shift();
+      };
+
+      /** 设置页松手吸附：按位移比例 / 速度决定退出或弹回，交还 CSS 过渡补间。 */
+      const endSettingsFollow = () => {
+        settingsFollowing = false;
+        const panel = settingsPanel;
+        settingsPanel = null;
+        if (!panel || !panel.isConnected) return;
+        let velocity = 0;
+        if (samples.length >= 2) {
+          const first = samples[0];
+          const last = samples[samples.length - 1];
+          const dt = last.t - first.t;
+          if (dt > 0) velocity = (last.x - first.x) / dt;
+        }
+        const width = Math.max(1, doc.documentElement.clientWidth);
+        const close = settingsSettle(settingsDx / width, velocity);
+        const distPx = Math.abs(settingsDx - (close ? -width : 0));
+        const duration = reducedMotion
+          ? 100
+          : Math.round(Math.max(140, Math.min(320, distPx / Math.max(Math.abs(velocity), 0.3))));
+        if (debugOn) {
+          console.info(
+            '[dsh-mobile-layout] 设置页吸附：dx=' + Math.round(settingsDx) +
+              ' velocity=' + velocity.toFixed(3) + ' → ' + (close ? 'close' : 'back') +
+              ' in ' + duration + 'ms',
+          );
+        }
+        panel.style.setProperty('transition', 'translate ' + duration + 'ms cubic-bezier(0.32, 0.72, 0, 1)', 'important');
+        panel.style.setProperty('translate', close ? (settingsDx < 0 ? '-105% 0' : '105% 0') : '0 0', 'important');
+        win.setTimeout(() => {
+          panel.style.removeProperty('transition');
+          panel.style.removeProperty('translate');
+          if (close && panel.isConnected) closeSettingsImmediate();
+        }, duration + 30);
       };
 
       const gestureStart = (x, y, target, tag, id) => {
@@ -3285,10 +3540,14 @@ window.__ModuleLoader__.load({
           debugLog('RIGHTBAR_FULLSCREEN');
           return;
         }
-        if (blockedAtStart()) {
+        if (overlayBlocked()) {
           debugLog('BLOCKED_LAYER');
           return;
         }
+        // 设置页不再当死区：起手时在屏上就进入「边界外滑动退出」模式（本轮
+        // 手势不再参与抽屉开关）；准入与翻页一致（内容滚动区、非输入控件）。
+        settingsExit = settingsPanelOpen();
+        settingsAreaOk = settingsExit ? canStartSettingsSwipe(target) : false;
         active = true;
         source = tag;
         startX = x;
@@ -3323,6 +3582,36 @@ window.__ModuleLoader__.load({
         }
         if (following) {
           updateFollow(x);
+          return;
+        }
+        // 设置页退出：内容区由插件的 settingsSwipe 左右滑动换页，仅保留
+        // 左边界退出——最左页签上右滑（翻页吞不掉）时面板跟手退出；其余
+        // 方向一律让路换页，面板不动。
+        if (settingsFollowing) {
+          updateSettingsFollow(x);
+          return;
+        }
+        if (settingsExit) {
+          if (!settingsAreaOk) {
+            debugLog('SETTINGS_AREA');
+            if (horizontal >= SWIPE_MIN) {
+              active = false;
+              armed = 0;
+            }
+            return;
+          }
+          if (hConsume || settingsPagerCanConsume(dir)) {
+            debugLog(hConsume ? 'H_SCROLLER' : 'SETTINGS_PAGE');
+            if (horizontal >= SWIPE_MIN) {
+              active = false;
+              armed = 0;
+            }
+            return;
+          }
+          if (horizontal < SWIPE_ARM_PX) return;
+          followBaseX = x;
+          if (!beginSettingsFollow()) return;
+          updateSettingsFollow(x);
           return;
         }
         // 未跟手：24px 处一次性判定资格（起手区 / 方向 / 抽屉状态），合格
@@ -4089,6 +4378,13 @@ window.__ModuleLoader__.load({
       '@keyframes dshm-pop-in { from { transform: translateY(10px); opacity: 0.4 } to { transform: translateY(0); opacity: 1 } }',
       'html[data-dshm-mode="mobile"] [data-dshm-popover] > * {',
       '  animation: dshm-pop-in 0.18s ease-out;',
+      '}',
+      /* 面板容器自底滑入：与 frame 的 padding-bottom 0.18s 过渡同步，修掉
+         「面板瞬现、输入行还在滑」的不同步（动画只作用于 translate 属性，
+         不碰面板规则里的 transform: none !important，两者互不覆盖）。 */
+      '@keyframes dshm-panel-in { from { translate: 0 105%; } to { translate: 0 0; } }',
+      'html[data-dshm-mode="mobile"] [data-dshm-popover] {',
+      '  animation: dshm-panel-in 0.18s ease-out;',
       '}',
       /* 弹层贴屏幕最底部：给 frame 预留等高的底部空间，让常驻条与输入行
          一起上移，面板正好落在常驻条下方（与 dsh-mobile-compose 一致）。 */
@@ -5986,6 +6282,7 @@ window.__ModuleLoader__.load({
       scrollerConsumes,
       decideDrawerGesture,
       drawerSettle,
+      settingsSettle,
       SETTLE_RATIO,
       SETTLE_VELOCITY,
       resolveImeHeight,
