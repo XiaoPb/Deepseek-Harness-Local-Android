@@ -32,7 +32,7 @@ window.__ModuleLoader__.load({
 
     const react = require('react');
 
-    const VERSION = '0.2.9';
+    const VERSION = '0.2.10';
     const MODE_MOBILE = 'mobile';
     const MODE_DEFAULT = 'default';
 
@@ -446,13 +446,13 @@ window.__ModuleLoader__.load({
      * 抽屉右滑开栏的起手区宽度（CSS px，从屏幕左缘起算）。
      *
      * 全面屏手势把系统「返回」绑在左缘，纯边缘滑动经常直接退回桌面；参考
-     * QQ 把打开区扩到屏幕左侧约 40%，中间偏左起手右滑也能开抽屉。钳到
-     * 64–200：太窄退化成边缘手势，太宽容易和内容横滑打架。
+     * QQ 把打开区扩到屏幕左侧，中间偏左起手右滑也能开抽屉。取左 60% 屏宽
+     * （下限 64 防窄屏退化成边缘手势）。
      */
     function drawerStartLimit(width) {
       const w = Number(width);
       if (!(w > 0)) return 96;
-      return Math.max(64, Math.min(200, Math.round(w * 0.4)));
+      return Math.max(64, Math.round(w * 0.6));
     }
 
     /**
