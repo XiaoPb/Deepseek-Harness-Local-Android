@@ -114,3 +114,12 @@ docs/promo/video/remotion/out/
 docs/promo/video/remotion/.remotion/
 docs/promo/video/remotion/public/fonts/
 docs/promo/video/remotion/public/assets/
+
+# 运行时包与编译期崩溃日志不入库（体积大、可重新下载/自动生成）
+_runtime_dl/
+_runtime_bak/
+hs_err_pid*.log
+_rel/
+
+# 本地编译测试覆盖位（v1.5.0）：放自建 tgz 覆盖 CI 资产，不入库
+local-overrides/

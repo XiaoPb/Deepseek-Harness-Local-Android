@@ -2,6 +2,26 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- AI device capabilities (DEVICE_CAPABILITIES.md §4) -->
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
+    <!--
+      蓝牙：Android 12+ 分拆成三个运行时权限，光有旧版 BLUETOOTH 拿不到扫描结果
+      （实测：只声明 BLUETOOTH/BLUETOOTH_ADMIN 时 startScan 不报错但永远是 0 条）。
+      usesPermissionFlags="neverForLocation" 表示不拿扫描结果推断位置，可免位置权限。
+      ACCESS_FINE_LOCATION 仍需保留：targetSdk=28 < 31 时系统按旧模型要求位置权限才给扫描结果。
+    -->
+    <uses-permission android:name="android.permission.BLUETOOTH" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
+    <uses-permission android:name="android.permission.BLUETOOTH_SCAN"
+        android:usesPermissionFlags="neverForLocation" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.FLASHLIGHT" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- APK 型扩展（扩展中心）触发系统安装器（v1.2.127，如 dsh-asr-service） -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
@@ -41,6 +61,23 @@
         android:maxSdkVersion="29" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="29" />
+
+    <!-- ==================== AI 设备能力扩展（v1.5.1） ====================
+         下面这批权限服务于「设备能力」开关组（见 PermissionCenterActivity 的
+         AI 设备能力分组）。每一项在代码里都由 CapabilityGate 单独门控，
+         默认全关 —— 声明权限只是让系统允许申请，不代表能力已启用。
+
+         媒体控制走通知访问权限（MediaSession 的 MEDIA_CONTENT_CONTROL 是
+         signature 级、普通 App 永远拿不到），故这里不需要额外声明权限。 -->
+    <uses-permission android:name="android.permission.READ_CALENDAR" />
+    <uses-permission android:name="android.permission.WRITE_CALENDAR" />
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
+    <uses-permission android:name="android.permission.READ_SMS" />
+    <!-- NFC 读标签：只用于前台接收贴近的标签，不做卡模拟（HCE 需独立 AID 声明） -->
+    <uses-permission android:name="android.permission.NFC" />
+    <!-- 地理围栏：addProximityAlert 需要精确定位；后台场景另需
+         ACCESS_BACKGROUND_LOCATION，由调用方在需要时单独引导授予 -->
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
 
     <!-- ⚠️ Android 11+ 的 package visibility（v1.2.83，调研发现的关键坑）：
          不声明 <queries> 时，App **看不到**用户后来安装的语音识别服务，
@@ -286,6 +323,51 @@
             <meta-data
                 android:name="android.accessibilityservice"
                 android:resource="@xml/dsh_accessibility_service" />
+        </service>
+
+        <receiver
+            android:name=".engine.cap.ReminderReceiver"
+            android:exported="false" />
+        <!-- 地理围栏进出与 NFC 标签：都是系统/围栏服务发来的广播，不接受外部应用触发，
+             故 exported=false。地理围栏的 PendingIntent 由本应用自己创建，系统按显式
+             组件投递，不需要 exported 也能收到。 -->
+        <receiver
+            android:name=".engine.cap.GeofenceReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="app.dsh.mobile.action.GEOFENCE" />
+            </intent-filter>
+        </receiver>
+        <receiver
+            android:name=".engine.cap.NfcTagReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.nfc.action.TAG_DISCOVERED" />
+                <action android:name="android.nfc.action.TECH_DISCOVERED" />
+                <action android:name="android.nfc.action.NDEF_DISCOVERED" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+            <meta-data
+                android:name="android.nfc.action.TECH_DISCOVERED"
+                android:resource="@xml/nfc_tech_filter" />
+        </receiver>
+        <receiver
+            android:name=".engine.cap.BootReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+
+        <service
+            android:name=".engine.cap.DeviceNotificationListener"
+            android:label="@string/app_name"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
         </service>
 
         <!-- Shizuku provider（官方要求）：应用启动时由 provider 触发与 Shizuku server 的 binder 握手，
