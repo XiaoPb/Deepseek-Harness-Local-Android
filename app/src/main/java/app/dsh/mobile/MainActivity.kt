@@ -184,6 +184,10 @@ class MainActivity : ThemedActivity() {
         findViewById<View>(R.id.btnMore).setOnClickListener {
             startActivity(Intent(this, SettingsActivity::class.java))
         }
+        // v1.4.62：岛是圆角胶囊，选项的系统方角涟漪会从圆角外戳出来（按压残影）。
+        // 整行按轮廓裁切兜底，配合子项的 22dp 圆角涟漪（bg_island_btn）。
+        // v1.4.63：上一轮并发改动把它删了，残影会复发 —— 补回。
+        findViewById<View>(R.id.statusBarRow).clipToOutline = true
         // 预览模式返回：一键从 AI 起的服务页回引擎主界面
         findViewById<View>(R.id.btnBack).setOnClickListener {
 runCatching { (application as DshApp).supervisor.webUrl() }
@@ -1543,6 +1547,39 @@ runCatching { (application as DshApp).supervisor.webUrl() }
      * 横屏时挖孔通常在左侧或右侧，此时 `displayCutout` 的 left/right 会大于 0、
      * top 可能为 0；岛是水平居中的，因此只需保证 top 安全，横向由居中布局自行避开。
      */
+    /**
+     * 把收起态正圆的**触控区**扩到 48dp 见方（v1.4.59）。
+     *
+     * ## 为什么需要
+     * 摄像头中心离屏幕顶端只有 67px（真机），圆要完整可见就不能超过 134px 直径
+     * —— 视觉上刚刚好，但换算成 dp 只有 38dp，**低于 Android 的 48dp 最小触控
+     * 尺寸**。用户实测「我都点不到」。
+     *
+     * 单纯把 View 放大不行：直径超过「圆心到屏幕顶距离 × 2」就会溢出屏幕，
+     * 而 clamp 到 top=0 又会把圆心推下去（用户报的「溢出 + 位置下移」）。
+     *
+     * ## 做法
+     * View 尺寸保持视觉正确（贴住顶部、罩住摄像头），用 [TouchDelegate] 把可点
+     * 区域向外扩到 48dp。父容器（FrameLayout）负责把落在扩展区的触摸事件转发
+     * 给这个 View —— 这是 Android 官方支持的「小控件大热区」做法。
+     *
+     * 扩展区会超出父容器边界时（圆贴顶），TouchDelegate 的 rect 允许负数起点，
+     * 父容器仍会按坐标命中；超出屏幕的部分自然无效，不影响可用性。
+     */
+    private fun applyHandleTouchTarget(handle: android.view.View, dotSize: Int) {
+        val minTouch = (48 * resources.displayMetrics.density).toInt()
+        if (dotSize >= minTouch) return   // 已经够大，不需要扩展
+        val parent = handle.parent as? android.view.ViewGroup ?: return
+        val grow = (minTouch - dotSize) / 2
+        val rect = android.graphics.Rect(
+            -grow,
+            -grow,
+            handle.width + grow,
+            handle.height + grow,
+        )
+        parent.touchDelegate = android.view.TouchDelegate(rect, handle)
+    }
+
     private fun applyIslandInsets() {
         val root = findViewById<android.view.View>(android.R.id.content) ?: return
         val row = findViewById<android.view.View>(R.id.statusBarRow) ?: return
@@ -1570,14 +1607,33 @@ runCatching { (application as DshApp).supervisor.webUrl() }
             //   · 单孔（左/中/右）：并集就是那个孔，精确对齐；
             //   · 双孔（如部分机型的药丸+副孔）：并集包住两者，岛罩住整段；
             //   · 无孔：返回 null，保持屏幕居中。
-            val cutCenterX = if (android.os.Build.VERSION.SDK_INT >= 30) {
+            // v1.4.58（真机反馈「还是不能贴紧摄像头、高度更高一点」）：
+            // 之前用 `cutTop * 0.85` 估直径，但 `cutTop` 是「顶边被遮挡深度」，
+            // 与摄像头**可见孔**的尺寸不完全一致：
+            //   · 模拟器：cutTop=128，孔 Rect(492,0-610,128) → 宽 118 高 128
+            //   · 真机（PLZ110）：cutTop=135，孔 Rect(568,0-648,135) → 宽 80 高 135
+            // 按 0.85 缩放得到 114px 的圆，顶在 y=0、圆心 y=57，而孔中心在
+            // y=67.5 —— 圆比孔中心高 10px，视觉上就被「顶上去」了。
+            //
+            // 正确做法：直接用 **boundingRect 的真实尺寸**，圆直径取孔的外接
+            // 正方形（max(宽,高)），并让圆心对齐孔中心。
+            val cutRect = if (android.os.Build.VERSION.SDK_INT >= 30) {
                 val cutout = insets.displayCutout
                 val rects = cutout?.boundingRects.orEmpty().filter {
                     it.width() > 0 && it.height() > 0
                 }
-                if (rects.isEmpty()) null
-                else (rects.minOf { it.left } + rects.maxOf { it.right }) / 2
+                if (rects.isEmpty()) null else {
+                    val l = rects.minOf { it.left }
+                    val r = rects.maxOf { it.right }
+                    val t = rects.minOf { it.top }
+                    val b = rects.maxOf { it.bottom }
+                    android.graphics.Rect(l, t, r, b)
+                }
             } else null
+            val cutCenterX = cutRect?.let { (it.left + it.right) / 2 }
+            val cutCenterY = cutRect?.let { (it.top + it.bottom) / 2 }
+            val cutHoleH = cutRect?.height() ?: cutTop
+            val cutHoleW = cutRect?.width() ?: cutTop
 
             // ⚠️ v1.4.46（用户实测「关掉全屏后灵动岛被状态栏盖住、连设置都进不去」）：
             // 非全屏时岛绝不能只按固定 10dp 定位 —— 窗口从 y=0 开始，状态栏压在最
@@ -1593,17 +1649,84 @@ runCatching { (application as DshApp).supervisor.webUrl() }
             // 全屏：岛贴屏幕最顶端（top=0），高度至少盖过挖孔 —— 黑色胶囊正好
             // 把摄像头罩住，这才是灵动岛该有的样子。
             // 非全屏：让开状态栏（statusTop）+ 常规 10dp 呼吸位。
-            val wantTop = if (immersive) 0 else statusTop + baseTop
-            val wantRowH = if (immersive) maxOf(rowH, cutTop) else rowH
-            // 收起态是正圆，宽高必须一致。全屏时直径要盖过镜头可见区，否则圆心
-            // 正对着摄像头孔，圆被物理开孔吃掉、用户看不见也点不到。
+            // ⚠️ v1.4.58（真机反馈「看着不跟摄像头」）：
+            // `boundingRect` 是「被遮挡区域的外接矩形」，**不等于摄像头的形状**。
+            // 真机实测 Rect(568,0-648,135)：宽 80、高 135 —— 摄像头本身是
+            // 80 直径的圆，135 是系统为安全留的纵向深度。
             //
-            // 注意 cutTop 是「顶边被遮挡的最大深度」（本机 128px），比镜头本身大：
-            // 镜头真实直径约 66px、中心在 y≈64。按 cutTop 取满会做成一个大黑饼，
-            // 取 0.85 既能罩住镜头，视觉上又不臃肿。
+            // 早期版本按「高」做直径（135+余量=149），圆心被推到 74.5，
+            // 而摄像头中心在 67.5 甚至更靠上 → 视觉上圆「比摄像头低/大一圈」，
+            // 所以怎么看都不贴合。
+            //
+            // 正确做法（v1.4.58）：
+            //   · 直径取 **min(宽,高)** = 摄像头真实尺寸（真机 80 → 兜底 91），
+            //     不再用高度，避免做成覆盖半个状态栏的大黑饼；
+            //   · 圆心 **对齐孔矩形的中心**（cutCenterY），而不是永远贴 y=0。
+            //     摄像头靠边缘时，圆跟着上移；孔偏下时圆也跟着下移。
+            //
+            // 直径下限用 handleH（26dp）保证可点（88dp 触控目标的近似）。
+            //
+            // ⚠️ v1.4.59（真机反馈「收起来之后的大小怎么跟我摄像头基本一样大？
+            // 我都点不到」「全屏模式下灵动岛会直接溢出屏幕，位置下移一点」）：
+            // v1.4.58 把直径钉成 `min(宽,高)` = 摄像头本身的 80px，视觉上贴合了，
+            // 但 80px ≈ 23dp，远低于 Android 48dp 触控下限 —— 手指根本点不中。
+            // 而单纯放大又不行：摄像头中心离屏幕顶端只有 67px，直径一旦超过
+            // 134px，圆的上沿就会跑到屏幕外（clamp 到 top=0 后又导致圆心下移，
+            // 这就是用户说的「溢出屏幕 + 位置下移」）。
+            //
+            // 现在的做法是**分离视觉尺寸与触控尺寸**：
+            //   · 视觉直径 = min(孔尺寸 + 余量, 圆心到屏幕顶距离 × 2)
+            //     —— 保证圆完整可见、不溢出，同时比摄像头大一圈（真机 134px）；
+            //   · 触控区由 TouchDelegate 额外扩到 48dp 见方（见 applyHandleTouchTarget）。
+            // 这样「看起来比摄像头大一圈、贴住顶部、手指点得中」三者同时成立。
+            val coverPad = (4 * d).toInt()
+            val holeSize = maxOf(cutHoleW, cutHoleH) + coverPad
+            // 圆心到屏幕顶的距离 = 孔中心 Y。直径不能超过它的两倍，否则溢出。
+            val maxDotNoOverflow = if (cutCenterY != null && cutCenterY > 0) {
+                cutCenterY * 2
+            } else {
+                Int.MAX_VALUE
+            }
             val wantDot = if (immersive) {
-                maxOf(handleH, ((cutTop * 0.85f).toInt() / 2) * 2)
+                maxOf(handleH, minOf(holeSize, maxDotNoOverflow))
             } else handleH
+            // 圆心对齐孔中心：top = 中心Y - 半径。clamp ≥0（孔贴顶时圆也贴顶）。
+            val wantTop = when {
+                !immersive -> statusTop + baseTop
+                cutCenterY == null -> 0
+                else -> (cutCenterY - wantDot / 2).coerceAtLeast(0)
+            }
+            // 展开态是长条工具栏（v1.4.60 真机反馈「展开时还是没有向下移，
+            // 会出现屏幕溢出，太贴边缘」）。
+            //
+            // 历史：早期把工具栏 top 设成 0（贴屏幕最顶），高度取孔高 —— 结果
+            // 工具栏顶边正好卡在屏幕边缘，圆角被裁、图标贴着挖孔，视觉上「溢出」。
+            //
+            // 现在的规则：
+            //   · top  = 孔的下沿（cutTop）+ 6dp 呼吸位 → 完全落在摄像头下方，
+            //            不再与孔重叠，也不会被屏幕边缘裁掉圆角；
+            //   · 高度 = 标准 rowH（44dp），不再为了「避开孔」而拉高 ——
+            //            既然已经下移，就不需要额外高度。
+            //   · 无挖孔时 top 用 statusTop + baseTop（与非全屏一致）。
+            // v1.4.62（宝宝反馈「灵动岛往上移，起码上以灵动岛当前高度的 3/4」）：
+            // 之前 top = 挖孔下沿 + 6dp（真机 156），整条工具栏都落在摄像头下方，
+            // 视觉上「离屏幕顶太远」，不像灵动岛而像一条独立的工具条。
+            //
+            // 现在从那个位置**上移自身高度的 3/4**（真机 154×0.75 ≈ 115），
+            // 顶边落到 y≈41 —— 工具栏上半部分与摄像头区域重叠，下半部分
+            // 仍在孔下方，观感更接近真灵动岛（贴着顶部、包住镜头）。
+            //
+            // 为什么是 3/4 而不是全移：全移到 y=0 会贴屏幕边、圆角被裁
+            // （v1.4.60 修过的「溢出」问题）；3/4 保留了顶部一点余量，
+            // 同时把大部分内容提到摄像头高度上。
+            val rowGap = (6 * d).toInt()
+            val wantRowH = rowH
+            val raise = (wantRowH * 3) / 4
+            val wantRowTop = when {
+                !immersive -> statusTop + baseTop
+                cutTop > 0 -> (cutTop + rowGap - raise).coerceAtLeast(0)
+                else -> statusTop + baseTop
+            }
 
             // 横向对齐（v1.4.54）：把「屏幕居中的重力」换成「按挖孔中心偏移」。
             //
@@ -1644,12 +1767,17 @@ runCatching { (application as DshApp).supervisor.webUrl() }
                     val wantStart = handleStart ?: 0
                     if (m.marginStart != wantStart) { m.marginStart = wantStart; dirty = true }
                 }
-                if (dirty) handle.layoutParams = lp
+                if (dirty) {
+                    handle.layoutParams = lp
+                    // 布局变了 → 触控区要跟着重算（等一次布局完成后再装）
+                    handle.post { applyHandleTouchTarget(handle, wantDot) }
+                }
             }
+            // 工具栏用 wantRowTop（贴顶），圆用 wantTop（对齐孔中心）—— 两者不再混用。
             row.layoutParams?.let { lp ->
                 val m = lp as? android.view.ViewGroup.MarginLayoutParams
-                if (m != null && (m.topMargin != wantTop || lp.height != wantRowH)) {
-                    m.topMargin = wantTop
+                if (m != null && (m.topMargin != wantRowTop || lp.height != wantRowH)) {
+                    m.topMargin = wantRowTop
                     lp.height = wantRowH
                     row.layoutParams = lp
                 }
@@ -1681,9 +1809,48 @@ runCatching { (application as DshApp).supervisor.webUrl() }
                 @Suppress("DEPRECATION")
                 insets.systemWindowInsetBottom
             }
-            // 非全屏时 decorFits=true，系统已替我们让开导航区 → padding 归零，
-            // 否则会重复内缩（页面底部多出一块空白）。
-            val bottomPad = if (immersive) maxOf(imeBottom, navBottom) else 0
+            // 底部让位（v1.4.65，宝宝反馈「全屏模式下打开输入法，输入框没有上移
+            // 导致根本看不了输入的文字」）。
+            //
+            // 旧实现 `if (immersive) maxOf(imeBottom, navBottom) else 0` 有两个错：
+            //   ① 非全屏时直接 0 —— 但 manifest 里的 adjustResize 在
+            //      `setDecorFitsSystemWindows(false)` 之后**不生效**（窗口不再为
+            //      任何系统栏让位），键盘照样盖住输入框；
+            //   ② 全屏时用 max(IME, 导航区) —— 键盘收起时 navBottom 会留一条空白。
+            //
+            // 正确语义：
+            //   · 键盘弹起（imeBottom > 0）→ padding = imeBottom（IME 高度已含
+            //     导航区，直接顶到键盘上方）；
+            //   · 键盘收起 → padding = navBottom **仅在全屏时**需要（窗口铺到
+            //     屏幕最底，手势条会压住内容）；非全屏时系统已让开，留 0。
+            val bottomPad = if (imeBottom > 0) {
+                imeBottom
+            } else if (immersive) {
+                navBottom
+            } else {
+                0
+            }
+
+            // v1.4.63（宝宝反馈「网页感觉有点被压缩太狠了，还是改回全屏吧，
+            // 到时候被遮挡就收起灵动岛即可」）：
+            // 取消 WebView 的顶部留白，网页恢复真正全屏。
+            //
+            // 权衡（记录一下，避免以后又改回去）：
+            //   · 留白（v1.4.61）：网页内容永不被岛遮，但视口矮了一整条工具栏
+            //     （真机 154px ≈ 44dp），手机上本就紧张，压缩感明显；
+            //   · 全屏（现在）：网页拿满整屏，岛浮在顶部。首屏顶部会被遮住一条，
+            //     但**岛可以一键收起**（点岛上的文字区/把手），收起后就是纯净全屏。
+            // 用户选择了后者 —— 交互上多一步，但默认视觉更开阔。
+            //
+            // 底部 padding 保留：导航条/键盘必须让位，否则输入框会被键盘盖住
+            // （v1.4.46 修过的老问题）。
+            // 顺手把可能残留的 topMargin 清零（老版本设过留白，升级后必须还原，
+            // 否则网页仍被压缩 —— 这类"改回默认却没生效"的坑踩过一次）。
+            val wlp = webView.layoutParams
+            if (wlp is android.view.ViewGroup.MarginLayoutParams && wlp.topMargin != 0) {
+                wlp.topMargin = 0
+                webView.layoutParams = wlp
+            }
             if (webView.paddingBottom != bottomPad) {
                 webView.setPadding(0, 0, 0, bottomPad)
             }
@@ -2850,11 +3017,39 @@ runCatching { (application as DshApp).supervisor.webUrl() }
         private const val KEY_PAGE_SCALE = "page_scale"
 
         /**
-         * 沉浸式状态栏开关：true 时横竖屏都隐藏系统状态栏（设置页可开）。
+         * 手机 UI 方案（v1.4.67，宝宝要求）：内置两套竖屏布局插件，用哪个由用户选。
          *
-         * 默认改为**关**（v1.4.30，宝宝实测反馈）：隐藏状态栏后顶部灵动岛会
-         * 压到摄像头挖孔上。默认显示系统状态栏，窗口不铺进挖孔区，岛与摄像头
-         * 天然错开；想要全屏的用户在设置里自行打开。
+         * · false（默认）= 我们自制的 narrow-sidebar / narrow-settings / narrow-rightbar
+         *   三件套。更轻、行为可预期，是长期使用的默认。
+         * · true = 社区插件 @xiaopb/dsh-mobile-layout（「官方推荐手机 UI」）。
+         *   抽屉 / 底部操作条 / 全屏设置页，视觉更接近官方 App。
+         *
+         * 两者互斥：overlay 里按这个开关把另一个标成 disabled，引擎不会同时加载。
+         */
+        private const val KEY_OFFICIAL_MOBILE_UI = "official_mobile_ui"
+
+        @JvmStatic
+        fun officialMobileUiEnabled(ctx: Context): Boolean =
+            ctx.getSharedPreferences(PREFS_UI, Context.MODE_PRIVATE)
+                .getBoolean(KEY_OFFICIAL_MOBILE_UI, false)
+
+        @JvmStatic
+        fun setOfficialMobileUiEnabled(ctx: Context, on: Boolean) {
+            ctx.getSharedPreferences(PREFS_UI, Context.MODE_PRIVATE)
+                .edit().putBoolean(KEY_OFFICIAL_MOBILE_UI, on).apply()
+        }
+
+        /**
+         * 沉浸式状态栏开关（v1.4.64：默认回到「带状态栏」）。
+         *
+         * 历史上反复过几次，结论记在这里避免再绕：
+         *   · v1.4.30 默认关 —— 隐藏状态栏后岛会压到挖孔上；
+         *   · v1.4.61 默认开 —— 岛已能精确对齐挖孔，想让岛代替状态栏；
+         *   · **v1.4.64 默认关** —— 宝宝实测「怎么改都有点难受」，全屏 + 岛
+         *     浮在网页上的组合，无论留白还是叠压都不够自然。带状态栏时窗口
+         *     天然让开顶部，岛在状态栏下方，最省心。
+         *
+         * 想全屏的用户仍可在设置 → 外观与显示里打开（岛会贴住摄像头）。
          */
         private const val KEY_IMMERSIVE = "immersive_statusbar"
         private const val DEFAULT_IMMERSIVE = false

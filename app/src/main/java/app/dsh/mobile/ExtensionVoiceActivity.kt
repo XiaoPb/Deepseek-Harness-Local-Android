@@ -6,7 +6,6 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
-import app.dsh.mobile.engine.ExtensionManager
 import app.dsh.mobile.engine.TtsManager
 import app.dsh.mobile.pet.PetOverlayService
 import app.dsh.mobile.pet.PetPluginDetector
@@ -26,15 +25,10 @@ class ExtensionVoiceActivity : ThemedActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        OrientationPrefs.applyTo(this)
+        OrientationPrefs.forcePortrait(this)
         setContentView(R.layout.activity_extension)
 
         findViewById<ImageView>(R.id.btnBack).setOnClickListener { finish() }
-
-        // —— 扩展中心 ——
-        findViewById<LinearLayout>(R.id.rowExt).setOnClickListener {
-            startActivity(android.content.Intent(this, ExtensionStoreActivity::class.java))
-        }
 
         // —— 社区插件（v1.2.113）：一键安装 dsh 生态插件 ——
         findViewById<LinearLayout>(R.id.rowPlugin).setOnClickListener {
@@ -71,17 +65,8 @@ class ExtensionVoiceActivity : ThemedActivity() {
 
     override fun onResume() {
         super.onResume()
-        refreshExt()
         refreshTtsRow()
         refreshPetRow()
-    }
-
-    /** 扩展中心入口：显示已激活扩展数（>0 变绿提示已并入引擎） */
-    private fun refreshExt() {
-        val count = runCatching { ExtensionManager(this).activeCount() }.getOrDefault(0)
-        val v = findViewById<TextView>(R.id.valExt)
-        v.text = getString(R.string.setting_ext_active_count, count)
-        v.setTextColor(if (count > 0) getColor(R.color.success) else getColor(R.color.text_secondary))
     }
 
     /** TTS 引擎可用性（列出 TextToSpeechService 提供方，不触发绑定） */

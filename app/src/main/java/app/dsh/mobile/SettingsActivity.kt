@@ -50,7 +50,7 @@ class SettingsActivity : ThemedActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // v1.4.18：不再硬锁竖屏 —— 跟随应用的三态偏好（平板无偏好时默认 auto）
-        OrientationPrefs.applyTo(this)
+        OrientationPrefs.forcePortrait(this)
         setContentView(R.layout.activity_settings)
         applyResponsiveLayout()
 
@@ -149,6 +149,10 @@ class SettingsActivity : ThemedActivity() {
         appliedLayout = savedLayout
         findViewById<LinearLayout>(R.id.rowAppearance).setOnClickListener {
             startActivity(Intent(this, AppearanceActivity::class.java))
+        }
+        // v1.4.58（宝宝要求）：扩展中心不再分组，直接显示在设置第一屏
+        findViewById<LinearLayout>(R.id.rowExt).setOnClickListener {
+            startActivity(Intent(this, ExtensionStoreActivity::class.java))
         }
         findViewById<LinearLayout>(R.id.rowExtensionVoice).setOnClickListener {
             startActivity(Intent(this, ExtensionVoiceActivity::class.java))
@@ -292,7 +296,7 @@ class SettingsActivity : ThemedActivity() {
             return
         }
         refreshAppearanceEntry()
-        refreshExtensionEntry()
+        refreshExtEntry()
     }
 
     /** 个性化入口副标题：当前主题 · 强调色（v1.4.56） */
@@ -304,11 +308,11 @@ class SettingsActivity : ThemedActivity() {
         )
     }
 
-    /** 扩展与语音入口副标题：已激活扩展数（v1.4.56） */
-    private fun refreshExtensionEntry() {
+    /** 扩展中心行副标题：已激活扩展数（v1.4.58 起该行回到主页第一屏） */
+    private fun refreshExtEntry() {
         val count = runCatching { ExtensionManager(this).activeCount() }.getOrDefault(0)
-        findViewById<TextView>(R.id.subExtensionEntry)?.text =
-            getString(R.string.setting_extension_entry_sub, count)
+        findViewById<TextView>(R.id.valExt)?.text =
+            getString(R.string.setting_ext_active_count, count)
     }
 
     /**

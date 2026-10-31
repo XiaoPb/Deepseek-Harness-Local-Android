@@ -60,7 +60,8 @@ check("no raw text dump left", 'joinToString("\\n\\n")' not in maint_kt)
 # ------------------------------------------------------- 2. 维护子页
 check("MaintenanceActivity.kt exists", bool(maint_kt))
 check("MaintenanceActivity: extends ThemedActivity", "ThemedActivity()" in maint_kt)
-check("MaintenanceActivity: follows OrientationPrefs", "OrientationPrefs.applyTo(this)" in maint_kt)
+check("MaintenanceActivity: follows OrientationPrefs",
+      "OrientationPrefs.applyTo(this)" in maint_kt or "OrientationPrefs.forcePortrait(this)" in maint_kt)
 check("MaintenanceActivity: locale wrap", "LocaleHelper.wrap" in maint_kt)
 check("manifest: MaintenanceActivity declared", ".MaintenanceActivity" in manifest)
 check(
@@ -86,7 +87,8 @@ check("BackupActivity.kt exists", bool(backup_kt))
 check("UpdateSettingsActivity.kt exists", bool(update_kt))
 for name, src in (("BackupActivity", backup_kt), ("UpdateSettingsActivity", update_kt)):
     check(name + ": extends ThemedActivity", "ThemedActivity()" in src)
-    check(name + ": follows OrientationPrefs", "OrientationPrefs.applyTo(this)" in src)
+    check(name + ": follows OrientationPrefs",
+          "OrientationPrefs.applyTo(this)" in src or "OrientationPrefs.forcePortrait(this)" in src)
     check(name + ": locale wrap", "LocaleHelper.wrap" in src)
     check("manifest: " + name + " declared", "." + name in manifest)
     check(
@@ -110,7 +112,10 @@ check("settings code: update entry wired", "UpdateSettingsActivity" in settings_
 check("maintenance layout: rowViewLog moved in", "rowViewLog" in maint_layout)
 check("maintenance code: rowViewLog wired", "rowViewLog" in maint_kt)
 check("main layout: rowViewLog moved out", "rowViewLog" not in layout)
-check("main layout: voice section removed", "settings_section_voice" not in layout)
+# 注意用 `@string/settings_section_voice"` 精确匹配：主页里还有一个
+# `settings_section_voice_plugins`（扩展与语音入口），纯前缀匹配会误报。
+check("main layout: voice section removed",
+      '@string/settings_section_voice"' not in layout)
 # v1.4.58：权限 7 行收进权限中心子页（两个分类入口），主页只留 rowPermEngine/rowPermCaps
 check("main layout: rowMic moved out (permission center)", "rowMic" not in layout)
 perm_layout = read(os.path.join(RES, "layout", "activity_permission_center.xml")) if exists(os.path.join(RES, "layout", "activity_permission_center.xml")) else ""
@@ -129,7 +134,8 @@ check("AppearanceActivity.kt exists", bool(appearance_kt))
 check("ExtensionVoiceActivity.kt exists", bool(ext_voice_kt))
 for name, src in (("AppearanceActivity", appearance_kt), ("ExtensionVoiceActivity", ext_voice_kt)):
     check(name + ": extends ThemedActivity", "ThemedActivity()" in src)
-    check(name + ": follows OrientationPrefs", "OrientationPrefs.applyTo(this)" in src)
+    check(name + ": follows OrientationPrefs",
+          "OrientationPrefs.applyTo(this)" in src or "OrientationPrefs.forcePortrait(this)" in src)
     check(name + ": locale wrap", "LocaleHelper.wrap" in src)
     check("manifest: " + name + " declared", "." + name in manifest)
 
@@ -140,7 +146,10 @@ def has_id(text, rid):
 for row in ("rowTheme", "rowLandscape", "rowScale", "rowImmersive", "rowFilesDir", "rowAccent", "rowLayoutMode"):
     check("main layout: " + row + " moved out (appearance)", not has_id(layout, row))
     check("appearance layout: row " + row, has_id(appearance_layout, row))
-for row in ("rowExt", "rowPlugin", "rowAsrApps", "rowVoiceService", "rowTts", "rowPet"):
+# v1.4.58：扩展中心回主页第一屏，其余语音/插件行留在子页
+check("main layout: rowExt on first screen", has_id(layout, "rowExt"))
+check("extension layout: rowExt moved out", not has_id(ext_voice_layout, "rowExt"))
+for row in ("rowPlugin", "rowAsrApps", "rowVoiceService", "rowTts", "rowPet"):
     check("main layout: " + row + " moved out (extension)", not has_id(layout, row))
     check("extension layout: row " + row, has_id(ext_voice_layout, row))
 
@@ -149,6 +158,27 @@ check("main layout: rowAppearance entry", "rowAppearance" in layout)
 check("main layout: rowExtensionVoice entry", "rowExtensionVoice" in layout)
 check("settings code: appearance entry wired", "AppearanceActivity" in settings_kt and "rowAppearance" in settings_kt)
 check("settings code: extension entry wired", "ExtensionVoiceActivity" in settings_kt and "rowExtensionVoice" in settings_kt)
+
+# ------------------------------------------- 2d. 子页 id 引用必须存在于自身布局
+# v1.4.58 事故：valExt 搬回主页后，扩展子页 refreshExt() 仍 findViewById(valExt)
+# → onResume NPE，点「语音与插件」应用重启。这条检查把同类悬空引用挡在提交前。
+SUB_PAGES = (
+    ("AppearanceActivity.kt", "activity_appearance.xml"),
+    ("ExtensionVoiceActivity.kt", "activity_extension.xml"),
+    ("BackupActivity.kt", "activity_backup.xml"),
+    ("UpdateSettingsActivity.kt", "activity_update_settings.xml"),
+    ("MaintenanceActivity.kt", "activity_maintenance.xml"),
+)
+for kt_name, xml_name in SUB_PAGES:
+    kt_path = os.path.join(JAVA, kt_name)
+    xml_path = os.path.join(RES, "layout", xml_name)
+    if not (exists(kt_path) and exists(xml_path)):
+        continue
+    kt_ids = set(re.findall(r"R\.id\.(\w+)", read(kt_path)))
+    xml_ids = set(re.findall(r'android:id="@\+id/(\w+)"', read(xml_path)))
+    missing = sorted(kt_ids - xml_ids)
+    check("%s: R.id 全部存在于 %s" % (kt_name, xml_name), not missing,
+          "悬空引用 " + ", ".join(missing))
 
 # ------------------------------------------------------- 3. affordance
 row_blocks = {}
@@ -202,6 +232,7 @@ NEW_KEYS = (
     "settings_section_system", "setting_maintenance", "setting_maintenance_sub",
     "setting_backup", "setting_backup_sub", "setting_update_entry_sub",
     "settings_section_personalization", "setting_appearance_sub", "setting_extension_entry_sub",
+    "settings_section_voice_plugins", "setting_voice_plugins_sub",
     "action_go_enable", "action_export", "action_import", "action_recover",
     "action_check", "action_disable", "action_restore", "action_restart",
     "report_passed", "report_fixed", "report_warned", "report_failed",

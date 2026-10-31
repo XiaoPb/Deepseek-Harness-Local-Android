@@ -111,17 +111,23 @@ check("M2: onPermissionRequest 校验 origin 是回环",
       "任意回环页面（含被注入的预览页）否则都能静默拿麦克风")
 
 # ══════════════════════════════════════════════════════════════════
-# M3：.npmrc 包名注入
+# M3：写 pnpm 策略前的包名注入
+# v1.4.67：策略位从 .npmrc 的 onlyBuiltDependencies 换成
+# pnpm-workspace.yaml 的 allowBuilds（pnpm 11 删除了旧键）。
 # ══════════════════════════════════════════════════════════════════
 plugin = read("app", "src", "main", "java", "app", "dsh", "mobile", "engine", "PluginCenter.kt")
 
-check("M3: 写 .npmrc 前校验 npm 包名",
+check("M3: 写 pnpm 策略前校验 npm 包名",
       "NPM_PACKAGE_NAME" in plugin and "matches(NPM_PACKAGE_NAME)" in plugin,
-      "包名含换行可注入 dangerouslyAllowAllBuilds=true，绕过 pnpm 供应链防线")
+      "包名含换行/YAML 指示符可注入别的策略，绕过 pnpm 供应链防线")
 check("M3: 包名正则覆盖 scoped",
       r"(@[a-z0-9-~][a-z0-9-._~]*/)?" in plugin)
-check("M3: 合并走 lambda replace（防 $ 被当分组引用）",
-      "line.replace(existing) {" in plugin)
+check("M3: 键一律写成双引号标量",
+      "'\"' + k + \"'\"" in plugin or '"\\"" + k + "\\": "' in plugin,
+      "YAML 裸标量不允许以 @ 起始，scoped 包名不加引号会写坏文件")
+check("M3: 不直接覆盖原文件（临时文件 + rename）",
+      'f.name + ".tmp"' in plugin,
+      "写一半失败会留下坏配置，插件全部装不了")
 
 # ══════════════════════════════════════════════════════════════════
 # 群友 dsh-root-doctor 的实测经验（susfs 隐藏挂载）
@@ -192,6 +198,34 @@ check("灵动岛: 收起时清零拖拽位移（否则被上次拖拽推偏）",
 check("灵动岛: GONE→VISIBLE 后补一次 insets 应用",
       "handle.requestApplyInsets()" in main_act,
       "GONE 时设的 layoutParams 不参与布局，可见后要重算")
+
+# ══════════════════════════════════════════════════════════════════
+# v1.4.58 灵动岛贴合摄像头（真机反馈「看着不跟摄像头」）
+# 根因：boundingRect 是「被遮挡区域的外接矩形」，不等于摄像头形状。
+# 真机 Rect(568,0-648,135)：宽 80 高 135 —— 摄像头是 80 直径的圆，
+# 135 是纵向安全深度。按高度做直径会把圆做得又大又偏下。
+# ══════════════════════════════════════════════════════════════════
+check("灵动岛: 圆直径同时受孔尺寸与「不溢出」双重约束",
+      "maxOf(cutHoleW, cutHoleH)" in main_act and "maxDotNoOverflow" in main_act,
+      "只用孔尺寸会太小点不中；只用孔高会做成大黑饼")
+check("灵动岛: 圆心对齐孔中心（不是永远贴 y=0）",
+      "cutCenterY - wantDot / 2" in main_act,
+      "摄像头靠边缘时圆要跟着上移")
+check("灵动岛: 工具栏下移到孔下方（不贴屏幕顶边）",
+      "cutTop + rowGap" in main_act,
+      "贴 top=0 会让工具栏卡在屏幕边缘、圆角被裁，视觉上就是溢出")
+check("灵动岛: 工具栏高度回归标准 rowH",
+      "val wantRowH = rowH" in main_act,
+      "已经下移就不需要为避开孔而额外拉高")
+check("灵动岛: 圆尺寸受「不溢出屏幕」约束",
+      "maxDotNoOverflow" in main_act,
+      "直径超过圆心到顶距离的两倍就会跑到屏幕外")
+check("灵动岛: 小圆用 TouchDelegate 扩到 48dp 触控区",
+      "applyHandleTouchTarget" in main_act and "TouchDelegate" in main_act,
+      "视觉尺寸只有 38dp 时手指点不中（用户实测「我都点不到」）")
+check("灵动岛: 工具栏与圆用各自的 top（wantRowTop / wantTop）",
+      "m.topMargin != wantRowTop" in main_act,
+      "混用会让工具栏跟着圆心下移")
 
 print("\n" + "-" * 44)
 print("通过 %d / 失败 %d" % (passed, failed))

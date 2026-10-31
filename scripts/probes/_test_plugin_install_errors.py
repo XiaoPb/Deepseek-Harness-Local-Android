@@ -54,9 +54,12 @@ src = open(KT, encoding="utf-8").read()
 strings = open(STR, encoding="utf-8").read()
 
 # ------------------------------------------------ 问题 1：stderr 截断
-check("截断：stderr 至少保留 1000 字符",
-      re.search(r"take\((1[0-9]{3}|[2-9][0-9]{3})\)", src) is not None,
-      "300 字符正好截在 'installation rejected:' 冒号处，把原因全丢了")
+# v1.4.64：不再用 take(N) 只留头部——pnpm 的 `Ignored build scripts:` 警告
+# 落在输出末尾，只留头会把它整段切掉（批准入口永不出现的根因之一）。
+check("截断：失败输出保留头尾各一段（不能只留头部）",
+      "clipHeadTail" in src and "takeLast(half)" in src,
+      "300 字符正好截在 'installation rejected:' 冒号处；只留头又会切掉末尾的"
+      "Ignored build scripts 警告")
 # 注意：成功分支的 stdout 仍用 take(300)，那是给 UI 显示的摘要，没问题。
 # 要守的是**失败分支的 stderr** —— 引擎把原因写在 rejected 之后。
 check("截断：失败分支的 stderr 不再 take(300)",
@@ -100,12 +103,85 @@ check("pnpm：识别 ERR_PNPM_IGNORED_BUILDS", "ERR_PNPM_IGNORED_BUILDS" in src)
 check("pnpm：识别被截断的错误码", "ERR_PNPM_IGNORED_BUILD\"" in src or
       "ERR_PNPM_IGNORED_BUILD'" in src,
       "用户截图里错误码被 UI 截成了 ERR_PNPM_IGNORED_BUIL")
-check("pnpm：写 onlyBuiltDependencies 白名单", "onlyBuiltDependencies" in src)
-check("pnpm：白名单禁止通配 `*`",
-      not re.search(r'onlyBuiltDependencies[^\n]*=\s*"\*"', src),
-      "写 * 等于允许所有传递依赖执行任意 postinstall —— 供应链攻击面")
-check("pnpm：合并已有配置而非覆盖",
-      "items +=" in src or "toMutableSet" in src)
+# v1.4.67：照抄上游 build-approval.js。pnpm 11 删除了 onlyBuiltDependencies，
+# 策略位改成 pnpm-workspace.yaml 的 allowBuilds 映射；旧的 .npmrc 写法无效。
+check("pnpm：策略位是 allowBuilds（不是已废弃的 onlyBuiltDependencies）",
+      "allowBuilds" in src,
+      "pnpm 11 起 onlyBuiltDependencies 被删除，写 .npmrc 永远不会生效")
+check("pnpm：不再往 .npmrc 写白名单",
+      "onlyBuiltDependencies=" not in src,
+      "pnpm 11 起 .npmrc 只读 auth/registry/TLS/proxy/local-address，"
+      "写 onlyBuiltDependencies= 从根上不生效（且会留下无效键）")
+check("pnpm：占位值沿用上游原文",
+      "set this to true or false" in src,
+      "pnpm 用它标记「还没决定」的构建脚本，识别错就永远等不到批准")
+_approve = re.search(r"fun approveBuilds.*?getOrDefault", src, re.S)
+check("pnpm：approveBuilds 内部有「文件不存在就拒绝」的防线",
+      _approve is not None and "if (!f.isFile) return@runCatching false" in _approve.group(0),
+      "v1.4.59 事故：凭空造 pnpm-workspace.yaml 导致所有插件装不了")
+# v1.4.64：上游 recordPendingBuilds 会**主动写**占位值（pnpm 非交互运行不会自己写）。
+# v1.4.63 只实现了「回读文件」，文件里永远没有占位值 → 批准入口永不出现，
+# 用户看到的还是 pnpm 原文报错。这是「还是同样的报错」的根因。
+_record = re.search(r"fun recordPendingBuilds.*?getOrDefault", src, re.S)
+check("pnpm：照抄上游 recordPendingBuilds —— 主动把占位值写进策略文件",
+      _record is not None and "UNDECIDED_BUILD" in _record.group(0)
+      and "writePolicyAtomic" in _record.group(0),
+      "不做这一步，非交互运行下待批准名单永远是空的")
+check("pnpm：recordPendingBuilds 只写合法 npm 包名",
+      _record is not None and "matches(NPM_PACKAGE_NAME)" in _record.group(0),
+      "把 pnpm 的说明性文字写成 YAML 键会把策略文件写坏")
+check("pnpm：install() 失败分支会自动放行 pnpm 点名的包并重试",
+      "allowBuildsFor(ctx, names)" in _install_body.group(0),
+      "只把名字交给 UI 而不放行 = 用户点了也装不上（v1.4.63~v1.4.66 的死结）")
+check("pnpm：自动放行后确实重试了同一个 spec",
+      _install_body.group(0).count("runDshPluginCli(ctx, \"add\", spec)") >= 2,
+      "放行了不重试 = 用户还得再点一次，等于没修")
+# pnpm 的 `Ignored build scripts:` 警告在输出**末尾**，只留前 N 字符会整段切掉
+check("pnpm：错误输出保留头尾（不能只留头部）",
+      "clipHeadTail" in src and "takeLast(half)" in src,
+      "警告落在输出末尾，只留前 1200 字符会让 ignoredBuildNames 永远解析不到")
+# pnpm 的原文是一句英文：`Ignored build scripts: esbuild, sharp.` ——
+# 最后一个包名天然带句号，而 npm 包名不允许以 `.` 结尾。不剥掉的话
+# NPM_PACKAGE_NAME 校验会把这个包整个丢掉，用户永远批不了它（纯函数测试实测发现）。
+check("pnpm：剥掉包名尾部句号（pnpm 原文是英文句子）",
+      "trimEnd('.', ';', ':')" in src,
+      "`Ignored build scripts: esbuild, sharp.` 的句号会被当成包名的一部分")
+check("pnpm：报告里的包名过 NPM_PACKAGE_NAME",
+      "filter { it.matches(NPM_PACKAGE_NAME) }" in src,
+      "把说明性文字当包名写进 YAML 会把策略文件写坏")
+check("pnpm：失败时合并 stderr 与 stdout",
+      "val combined = if (out.isNotBlank()) raw" in src,
+      "pnpm 的 ignored-builds 是警告，可能走 stdout，只拼 stderr 会解析不到")
+check("pnpm：形状认不出就放弃改写",
+      "return null" in src and "layout not recognised" in src or "refusing to write" in src,
+      "按行改 YAML 遇到内联列表/锚点必须放弃，不能硬写")
+check("pnpm：批准前校验 npm 包名",
+      "matches(NPM_PACKAGE_NAME)" in src,
+      "包名注入可改写别的 pnpm 策略（供应链防线）")
+check("pnpm：写临时文件再 rename",
+      "f.name + \".tmp\"" in src or 'f.name + ".tmp"' in src,
+      "写一半失败会留下坏配置，插件全部装不了")
+check("pnpm：只批准仍待决定的包（上游 stale-approval 语义：任一不在待定就整体拒绝）",
+      "it !in pending" in src,
+      "批准已被拒绝/已批准的包等于绕过用户的拒绝决定")
+check("pnpm：待定过滤不是部分批准（不能只挑出在 pending 里的那几个就写）",
+      "names.filter { it in pending }" not in src,
+      "部分批准 = 拿着过期名单重试会静默写出用户没确认过的批准")
+# v1.4.67 起设计改为「自动放行 pnpm 点名的具体包 + 重试」（早期 v1.4.37 就是
+# 这么做的，宝宝反馈「之前都不会」证明这条路可行）。自动批准本身可接受，
+# 但**授权范围**必须严格受限，否则就是替用户敞开供应链。
+check("安全：自动放行绝不写通配",
+      "!it.contains('*')" in src,
+      "通配 = 允许所有传递依赖跑任意 postinstall，经典供应链攻击面")
+check("安全：自动放行的包名必须过 NPM_PACKAGE_NAME",
+      "allowBuildsFor" in src and
+      re.search(r"fun allowBuildsFor.*?getOrDefault", src, re.S) is not None and
+      "matches(NPM_PACKAGE_NAME)" in
+      (re.search(r"fun allowBuildsFor.*?getOrDefault", src, re.S).group(0)),
+      "包名可注入 YAML（如换行 + \"*\": true），绕过白名单")
+check("安全：只写 pnpm 自己点名的包，不放行整个依赖树",
+      "ignoredBuildNames(msg)" in _install_body.group(0),
+      "凭空放大放行范围 = 静默批准用户没同意的包")
 
 # ------------------------------------------------ i18n
 check("i18n：不硬编码中文提示", "此插件要求" not in src and "无法读取" not in src,

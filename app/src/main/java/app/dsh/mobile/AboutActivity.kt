@@ -26,7 +26,7 @@ class AboutActivity : ThemedActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        OrientationPrefs.applyTo(this)
+        OrientationPrefs.forcePortrait(this)
         setContentView(R.layout.activity_about)
 
         // 归一化过时的"已下载/待装"状态（版本不比当前已安装的新 → 清掉），

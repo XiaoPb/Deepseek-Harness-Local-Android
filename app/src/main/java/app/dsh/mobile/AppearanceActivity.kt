@@ -29,7 +29,7 @@ class AppearanceActivity : ThemedActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        OrientationPrefs.applyTo(this)
+        OrientationPrefs.forcePortrait(this)
         setContentView(R.layout.activity_appearance)
 
         orientMode = OrientationPrefs.get(this)
@@ -55,6 +55,25 @@ class AppearanceActivity : ThemedActivity() {
         swImmersive.isChecked = MainActivity.immersiveEnabled(this)
         swImmersive.setOnCheckedChangeListener { _, checked ->
             MainActivity.setImmersiveEnabled(this, checked)
+        }
+
+        // —— 官方推荐手机 UI（v1.4.67）：两套竖屏布局插件二选一 ——
+        // 切换需要重写 android-overlay.yml 并重启引擎才生效（插件在启动时加载）。
+        val swOfficialUi = findViewById<Switch>(R.id.swOfficialUi)
+        swOfficialUi.isChecked = MainActivity.officialMobileUiEnabled(this)
+        swOfficialUi.setOnCheckedChangeListener { _, checked ->
+            MainActivity.setOfficialMobileUiEnabled(this, checked)
+            // 立刻重写 overlay，让「重启引擎」时用的是新方案
+            runCatching { app.dsh.mobile.engine.EngineConfig.ensureAndroidOverlay(this) }
+            android.app.AlertDialog.Builder(this)
+                .setTitle(R.string.setting_official_ui)
+                .setMessage(R.string.setting_official_ui_restart_hint)
+                .setPositiveButton(R.string.action_restart_now) { _, _ ->
+                    (application as app.dsh.mobile.DshApp).supervisor.restart()
+                    Toast.makeText(this, getString(R.string.engine_restarting), Toast.LENGTH_SHORT).show()
+                }
+                .setNegativeButton(android.R.string.cancel, null)
+                .show()
         }
 
         // —— 文件保存目录（v1.4.26，DSHA 风格 Download/DSH MOBILE）——
@@ -118,8 +137,10 @@ class AppearanceActivity : ThemedActivity() {
                 if (picked == orientMode) return@setSingleChoiceItems
                 orientMode = picked
                 OrientationPrefs.set(this, picked)
-                // v1.4.18：立即生效（平板用户当场就能看到双栏/单列切换）
-                OrientationPrefs.applyTo(this)
+                // v1.4.64：设置页本身**固定竖屏**（不再跟随横屏偏好），
+                // 所以这里不能调 applyTo —— 那会让整个设置页横过来。
+                // 偏好在返回主界面时生效（MainActivity 按偏好应用）。
+                OrientationPrefs.forcePortrait(this)
                 findViewById<TextView>(R.id.valLandscape).text = getString(orientLabel(picked))
                 Toast.makeText(
                     this,

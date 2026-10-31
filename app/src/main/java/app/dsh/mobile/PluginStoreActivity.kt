@@ -12,6 +12,7 @@ import android.widget.EditText
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.Toast
 import app.dsh.mobile.engine.PluginCenter
 import app.dsh.mobile.engine.PluginKillSwitch
 import app.dsh.mobile.engine.PluginMarket
@@ -91,7 +92,7 @@ class PluginStoreActivity : ThemedActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        OrientationPrefs.applyTo(this)
+        OrientationPrefs.forcePortrait(this)
         setContentView(R.layout.activity_plugin_store)
         findViewById<MaxWidthLinearLayout>(R.id.pluginStoreBody).maxWidthDp =
             STORE_CONTENT_MAX_WIDTH_DP
@@ -719,6 +720,9 @@ class PluginStoreActivity : ThemedActivity() {
         banner.visibility = if (active) View.VISIBLE else View.GONE
     }
 
+    /** 安装看门狗 token：回调正常到达就置 null，超时兜底会检查它。 */
+    private var installWatchdog: Any? = null
+
     private fun runInstall(pkg: String, btn: TextView, basePkg: String) {
         btn.text = getString(R.string.plugin_checking)
         btn.isEnabled = false
@@ -788,8 +792,34 @@ class PluginStoreActivity : ThemedActivity() {
         btn.text = getString(R.string.plugin_installing)
         btn.isEnabled = false
         btn.setTextColor(getColor(R.color.text_secondary))
+        // v1.4.66（宝宝反馈「下载完没有回调，一直显示安装中」）：
+        // UI 层看门狗。底层已经修了阻塞读的死锁（见 runDshPluginCli），但
+        // installExecutor 是**单线程**池 —— 万一某个任务仍卡住，后续所有安装
+        // 会排队，用户永远看到「安装中」。
+        //
+        // 这里挂一个 150 秒的兜底：超时后把按钮恢复成可点状态并提示，
+        // 用户至少能再点一次（真实状态以插件中心列表为准）。
+        // 用 token 防串：回调正常到达就作废这个看门狗。
+        val watchdogToken = Any()
+        installWatchdog = watchdogToken
+        btn.postDelayed({
+            if (installWatchdog !== watchdogToken) return@postDelayed
+            if (isFinishing || isDestroyed) return@postDelayed
+            btn.text = getString(R.string.plugin_install)
+            btn.isEnabled = true
+            btn.isClickable = true
+            btn.setTextColor(getColor(R.color.text_secondary))
+            Toast.makeText(
+                this@PluginStoreActivity,
+                getString(R.string.plugin_install_timeout),
+                Toast.LENGTH_LONG,
+            ).show()
+            reload(verbose = true)
+        }, 150_000L)
         PluginCenter.install(this, pkg) { ok, msg ->
             runOnUiThread {
+                // 回调到了 → 作废看门狗
+                installWatchdog = null
                 if (ok) {
                     btn.text = getString(R.string.plugin_installed)
                     btn.setTextColor(getColor(R.color.success))
@@ -811,13 +841,89 @@ class PluginStoreActivity : ThemedActivity() {
                     btn.setTextColor(getColor(R.color.danger))
                     btn.isEnabled = true
                     btn.isClickable = true
-                    // v1.4.37（用户反馈「插件下不了」）：引擎因版本不兼容拒绝安装时，
-                    // 把真正原因完整弹出来，并提供「强制安装此版本」入口。
-                    // 旧实现只把错误截成 28 字符塞进按钮，用户根本看不到原因。
-                    offerEngineExemptionIfNeeded(pkg, btn, basePkg, msg)
+                    // v1.4.63（照抄上游 build-approval.js 的「先批准再重跑」）：
+                    // pnpm 因未批准的构建脚本拒绝安装时，把包名换成一次确认弹窗。
+                    // 只有确实解析出包名才弹，其它错误不打扰用户。
+                    if (!offerBuildApproval(pkg, btn, basePkg, msg)) {
+                        // v1.4.37（用户反馈「插件下不了」）：引擎因版本不兼容拒绝安装时，
+                        // 把真正原因完整弹出来，并提供「强制安装此版本」入口。
+                        // 旧实现只把错误截成 28 字符塞进按钮，用户根本看不到原因。
+                        offerEngineExemptionIfNeeded(pkg, btn, basePkg, msg)
+                    }
                 }
             }
         }
+    }
+
+    /**
+     * pnpm 因「未批准的构建脚本」拒绝安装 → 问用户是否批准，批准后原样重装。
+     *
+     * 与上游 `approveBuildsAndRetry` 同一语义：**只有失败页提出了待批准的包名
+     * 才提供这个入口**，批准范围严格限定在 pnpm 报告的那几个包（不含通配），
+     * 用户明确点确认才把策略文件里的占位值改成 `true`。
+     *
+     * 为什么不自动批准：允许依赖执行 install/postinstall 等于允许它跑任意代码，
+     * 是供应链攻击的经典入口。引擎自己的 UI 也必须用户点一下，我们照做。
+     *
+     * @return true = 已弹出批准入口（调用方不要再弹别的窗）
+     */
+    private fun offerBuildApproval(
+        pkg: String,
+        btn: TextView,
+        basePkg: String,
+        msg: String,
+    ): Boolean {
+        if (isFinishing || isDestroyed) return false
+        // install() 用 "ignored-builds:" 前缀标记这条失败的种类，并带上包名清单
+        val listed = msg.removePrefix("ignored-builds:").takeIf { it != msg } ?: return false
+        val names = listed.split(',')
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+        if (names.isEmpty()) return false
+        btn.text = getString(R.string.plugin_build_approve_btn)
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.plugin_build_pending_title))
+            .setMessage(
+                getString(
+                    R.string.plugin_build_pending_body,
+                    names.joinToString("\n• ", prefix = "• "),
+                ),
+            )
+            .setPositiveButton(R.string.plugin_build_approve) { _, _ ->
+                approveAndRetry(pkg, btn, basePkg, names)
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+        return true
+    }
+
+    /**
+     * 写入批准并重装。批准失败（文件不存在或形状认不出）就明确告知，
+     * 不静默重试 —— 静默重试正是旧实现一直修不好的原因。
+     */
+    private fun approveAndRetry(
+        pkg: String,
+        btn: TextView,
+        basePkg: String,
+        names: List<String>,
+    ) {
+        if (isFinishing || isDestroyed || !btn.isAttachedToWindow) return
+        btn.text = getString(R.string.plugin_installing)
+        btn.isEnabled = false
+        Thread({
+            val approved = PluginCenter.approveBuilds(applicationContext, names)
+            runOnUiThread {
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                if (approved) {
+                    doInstall(pkg, btn, basePkg)
+                } else {
+                    btn.text = getString(R.string.plugin_failed, getString(R.string.plugin_build_approve_failed).take(28))
+                    btn.setTextColor(getColor(R.color.danger))
+                    btn.isEnabled = true
+                    btn.isClickable = true
+                }
+            }
+        }, "plugin-build-approve").apply { isDaemon = true; start() }
     }
 
     /**
